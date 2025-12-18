@@ -353,7 +353,6 @@ else:  # Random Pick
         with col2:
             all_locations = sorted({r["location"] for r in restaurants if r["location"]})
             location_filter = st.multiselect("Neighborhood", options=all_locations, default=[])
-            exclude_visited = st.checkbox("Exclude places I've already visited ✅")
 
         filtered = restaurants.copy()
         if cuisine_filter:
