@@ -18,7 +18,7 @@ NEIGHBORHOODS = [
     "South Loop",
     "Chinatown",
     "Pilsen",
-    "West Town"
+    "West Town",
     "Suburb"
 ]
 
