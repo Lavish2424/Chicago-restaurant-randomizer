@@ -37,9 +37,9 @@ if action == "Add a Restaurant":
     st.header("Add New Restaurant")
     with st.form("add_restaurant"):
         name = st.text_input("Restaurant Name")
-        cuisine = st.text_input("Cuisine (e.g., Italian, Tacos, Sushi)")
+        cuisine = st.text_input("Cuisine")
         price = st.selectbox("Price Range", ["$", "$$", "$$$", "$$$$"])
-        location = st.text_input("Neighborhood/Location in Chicago")
+        location = st.text_input("Location")
         submitted = st.form_submit_button("Add Restaurant")
         if submitted and name:
             if any(r["name"].lower() == name.lower() for r in restaurants):
