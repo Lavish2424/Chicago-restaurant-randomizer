@@ -73,14 +73,14 @@ def delete_restaurant(index):
 # Helper to save edited restaurant
 def save_edited_restaurant(index, updated_data, new_photos, photos_to_delete):
     r = restaurants[index]
-   
+  
     # Delete selected photos
     for photo_path in photos_to_delete:
         if os.path.exists(photo_path):
             os.remove(photo_path)
         if photo_path in r["photos"]:
             r["photos"].remove(photo_path)
-   
+  
     # Add new photos
     added_paths = []
     if new_photos:
@@ -96,11 +96,11 @@ def save_edited_restaurant(index, updated_data, new_photos, photos_to_delete):
             with open(filepath, "wb") as f:
                 f.write(photo.getbuffer())
             added_paths.append(filepath)
-   
+  
     # Update fields
     r.update(updated_data)
     r["photos"].extend(added_paths)
-   
+  
     save_data(restaurants)
     st.success(f"{updated_data['name']} updated successfully!")
     st.rerun()
@@ -111,7 +111,7 @@ if action == "Add a Restaurant":
         name = st.text_input("Restaurant Name*", placeholder="e.g., Lou Malnati's")
         cuisine = st.text_input("Cuisine*", placeholder="e.g., Italian, Deep Dish Pizza")
         price = st.selectbox("Price Range*", ["$", "$$", "$$$", "$$$$"])
-       
+      
         location_option = st.selectbox(
             "Neighborhood/Location in Chicago*",
             options=NEIGHBORHOODS + ["Other"]
@@ -120,10 +120,14 @@ if action == "Add a Restaurant":
             location = st.text_input("Enter custom neighborhood*", placeholder="e.g., Logan Square")
         else:
             location = location_option
-       
+      
         address = st.text_input("Address*", placeholder="e.g., 123 N Wacker Dr, Chicago, IL")
         
+        # NEW: Cocktail bar checkbox
+        is_cocktail_bar = st.checkbox("Cocktail Bar Focus 🍸 (great drinks, bar vibes)", value=False)
         
+        visited = st.checkbox("Already visited? ✅", value=False)
+       
         uploaded_photos = st.file_uploader(
             "Upload Photos (optional, multiple allowed)",
             type=["jpg", "jpeg", "png"],
@@ -157,6 +161,7 @@ if action == "Add a Restaurant":
                     "location": location.strip(),
                     "address": address.strip(),
                     "visited": visited,
+                    "is_cocktail_bar": is_cocktail_bar,  # NEW field
                     "photos": photo_paths,
                     "reviews": []
                 })
@@ -196,13 +201,13 @@ elif action == "Add a Review":
 
 elif action == "View All Restaurants":
     st.header("All Restaurants")
-    
+   
     if not restaurants:
         st.info("No restaurants added yet.")
     else:
         # Search bar
         search_term = st.text_input("🔍 Search by name, cuisine, or neighborhood")
-        
+       
         filtered_restaurants = restaurants
         if search_term:
             search_lower = search_term.lower()
@@ -213,17 +218,18 @@ elif action == "View All Restaurants":
                 or search_lower in r["location"].lower()
             ]
             st.write(f"**Found {len(filtered_restaurants)} restaurant(s)** matching '{search_term}'")
-        
+       
         for idx, r in enumerate(sorted(filtered_restaurants, key=lambda x: x["name"].lower())):
-            # Rating and visited badge
+            # Icons and badges
+            cocktail_icon = " 🍸" if r.get("is_cocktail_bar", False) else ""
             review_text = ""
             if r["reviews"]:
                 avg = sum(rev["rating"] for rev in r["reviews"]) / len(r["reviews"])
                 review_text = f" • {avg:.1f}⭐ ({len(r['reviews'])})"
-            
+           
             visited_badge = " ✅ Visited" if r.get("visited", False) else ""
-            
-            with st.expander(f"{r['name']}{visited_badge} • {r['cuisine']} • {r['price']} • {r['location']}{review_text}"):
+           
+            with st.expander(f"{r['name']}{cocktail_icon}{visited_badge} • {r['cuisine']} • {r['price']} • {r['location']}{review_text}"):
                 col1, col2 = st.columns([3, 1])
                 with col1:
                     st.write(f"**Address:** {r.get('address', 'Not provided')}")
@@ -231,8 +237,7 @@ elif action == "View All Restaurants":
                     if st.button("Edit ✏️", key=f"edit_{idx}"):
                         st.session_state.editing_index = idx
                         st.rerun()
-                    
-                    # Improved delete confirmation
+                   
                     delete_key = f"delete_confirm_{idx}"
                     if delete_key in st.session_state:
                         col_del, col_cancel = st.columns(2)
@@ -247,7 +252,7 @@ elif action == "View All Restaurants":
                         if st.button("Delete 🗑️", key=f"delete_{idx}", type="secondary"):
                             st.session_state[delete_key] = True
                             st.rerun()
-                
+               
                 # Show current photos
                 if r.get("photos"):
                     st.write("**Photos:**")
@@ -255,7 +260,7 @@ elif action == "View All Restaurants":
                     for p_idx, photo_path in enumerate(r["photos"]):
                         if os.path.exists(photo_path):
                             cols[p_idx % 3].image(photo_path, use_column_width=True)
-                
+               
                 # Reviews
                 if r["reviews"]:
                     st.write("**Reviews:**")
@@ -265,20 +270,20 @@ elif action == "View All Restaurants":
                         st.markdown("---")
                 else:
                     st.write("_No reviews yet — be the first!_")
-        
-        # Edit form
+       
+        # Edit form (updated to include cocktail bar checkbox)
         if "editing_index" in st.session_state:
             edit_idx = st.session_state.editing_index
             r = restaurants[edit_idx]
-           
+          
             st.markdown("---")
             st.subheader(f"Editing: {r['name']}")
-           
+          
             with st.form("edit_restaurant"):
                 new_name = st.text_input("Restaurant Name*", value=r["name"])
                 new_cuisine = st.text_input("Cuisine*", value=r["cuisine"])
                 new_price = st.selectbox("Price Range*", ["$", "$$", "$$$", "$$$$"], index=["$", "$$", "$$$", "$$$$"].index(r["price"]))
-               
+              
                 current_location = r["location"]
                 if current_location in NEIGHBORHOODS:
                     location_option = st.selectbox("Neighborhood*", options=NEIGHBORHOODS + ["Other"], index=NEIGHBORHOODS.index(current_location))
@@ -288,11 +293,14 @@ elif action == "View All Restaurants":
                     new_location = st.text_input("Custom neighborhood*", value=current_location)
                 else:
                     new_location = location_option
-               
+              
                 new_address = st.text_input("Address*", value=r.get("address", ""))
-                
-                new_visited = st.checkbox("Already visited? ✅", value=r.get("visited", False))
                
+                new_visited = st.checkbox("Already visited? ✅", value=r.get("visited", False))
+                
+                # NEW: Cocktail bar in edit
+                new_is_cocktail_bar = st.checkbox("Cocktail Bar Focus 🍸", value=r.get("is_cocktail_bar", False))
+              
                 st.write("**Current Photos (check to delete):**")
                 photos_to_delete = []
                 if r.get("photos"):
@@ -303,24 +311,24 @@ elif action == "View All Restaurants":
                                 st.image(photo_path, use_column_width=True)
                                 if st.checkbox("Delete this photo", key=f"del_photo_{edit_idx}_{p_idx}"):
                                     photos_to_delete.append(photo_path)
-               
+              
                 new_photos = st.file_uploader(
                     "Add more photos (optional)",
                     type=["jpg", "jpeg", "png"],
                     accept_multiple_files=True,
                     key=f"new_photos_{edit_idx}"
                 )
-               
+              
                 col_save, col_cancel = st.columns(2)
                 with col_save:
                     save_submitted = st.form_submit_button("Save Changes")
                 with col_cancel:
                     cancel = st.form_submit_button("Cancel")
-               
+              
                 if cancel:
                     del st.session_state.editing_index
                     st.rerun()
-               
+              
                 if save_submitted:
                     if not all([new_name, new_cuisine, new_location, new_address]):
                         st.error("All required fields must be filled.")
@@ -334,13 +342,13 @@ elif action == "View All Restaurants":
                             "location": new_location.strip(),
                             "address": new_address.strip(),
                             "visited": new_visited,
+                            "is_cocktail_bar": new_is_cocktail_bar,  # NEW
                         }
                         save_edited_restaurant(edit_idx, updated_data, new_photos, photos_to_delete)
 
 else:  # Random Pick
     st.header("🎲 Random Restaurant Picker")
     st.markdown("Apply filters below, then let fate decide!")
-
     if not restaurants:
         st.info("No restaurants yet — add some first!")
     else:
@@ -350,43 +358,62 @@ else:  # Random Pick
             cuisine_filter = st.multiselect("Cuisine", options=all_cuisines, default=[])
             all_prices = sorted({r["price"] for r in restaurants}, key=lambda x: len(x))
             price_filter = st.multiselect("Price Range", options=all_prices, default=[])
+            
+            # NEW: Cocktail bar filters
+            st.markdown("**Bar/Restaurant Type**")
+            cocktail_option = st.radio(
+                "Include cocktail bars?",
+                options=["All (restaurants & bars)", "Only Cocktail Bars 🍸", "Exclude Cocktail Bars"],
+                index=0
+            )
+            
         with col2:
             all_locations = sorted({r["location"] for r in restaurants if r["location"]})
             location_filter = st.multiselect("Neighborhood", options=all_locations, default=[])
+            
+            exclude_visited = st.checkbox("Exclude already visited restaurants")
 
         filtered = restaurants.copy()
+        
+        # Apply type filter
+        if cocktail_option == "Only Cocktail Bars 🍸":
+            filtered = [r for r in filtered if r.get("is_cocktail_bar", False)]
+        elif cocktail_option == "Exclude Cocktail Bars":
+            filtered = [r for r in filtered if not r.get("is_cocktail_bar", False)]
+        
         if cuisine_filter:
             filtered = [r for r in filtered if r["cuisine"] in cuisine_filter]
         if price_filter:
             filtered = [r for r in filtered if r["price"] in price_filter]
         if location_filter:
             filtered = [r for r in filtered if r["location"] in location_filter]
+        if exclude_visited:
+            filtered = [r for r in filtered if not r.get("visited", False)]
 
         st.write(f"**{len(filtered)} restaurant(s)** match your filters.")
-
+        
         if filtered:
-            # New random pick
             if st.button("🎲 Pick Random Restaurant!", type="primary", use_container_width=True, key="new_pick"):
                 choice = random.choice(filtered)
                 st.session_state.last_random_choice = choice
                 st.balloons()
                 st.rerun()
-
-            # Show current/last choice with "Pick Again"
+                
             if "last_random_choice" in st.session_state and st.session_state.last_random_choice in filtered:
                 choice = st.session_state.last_random_choice
-                st.markdown(f"## 🍴 Your pick: **{choice['name']}**")
+                cocktail_tag = " 🍸 Cocktail Bar" if choice.get("is_cocktail_bar", False) else ""
+                st.markdown(f"## 🍴 Your pick: **{choice['name']}**{cocktail_tag}")
                 visited_tag = " ✅ (Already visited)" if choice.get("visited", False) else ""
                 st.write(f"**Cuisine:** {choice['cuisine']} • **Price:** {choice['price']} • **Location:** {choice['location']}{visited_tag}")
                 st.write(f"**Address:** {choice.get('address', 'Not provided')}")
-
+                
                 if choice.get("photos"):
                     st.markdown("### Photos")
                     cols = st.columns(3)
                     for idx, photo_path in enumerate(choice["photos"]):
                         if os.path.exists(photo_path):
                             cols[idx % 3].image(photo_path, use_column_width=True)
-
+                            
                 if choice["reviews"]:
                     st.markdown("### Recent Reviews")
                     for rev in choice["reviews"][-3:]:
@@ -394,14 +421,12 @@ else:  # Random Pick
                         st.write(f"_{rev['comment']}_")
                 else:
                     st.info("No reviews yet — you'll be the pioneer!")
-
+                    
                 if st.button("🎲 Pick Again!", type="secondary", use_container_width=True):
                     choice = random.choice(filtered)
                     st.session_state.last_random_choice = choice
                     st.rerun()
-
             elif "last_random_choice" in st.session_state:
-                # Previous choice no longer matches filters
                 del st.session_state.last_random_choice
                 st.info("Previous pick no longer matches current filters — pick again!")
         else:
