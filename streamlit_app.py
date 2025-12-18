@@ -66,7 +66,6 @@ elif action == "Add a Review":
         with st.form("add_review"):
             rating = st.slider("Rating", 1, 5, 3)
             comment = st.text_area("Your thoughts")
-            reviewer = st.text_input("Your name (optional)", "")
             submitted = st.form_submit_button("Submit Review")
             if submitted:
                 review = {
