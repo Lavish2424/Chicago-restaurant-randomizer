@@ -31,7 +31,7 @@ action = st.sidebar.radio("What do you want to do?",
                           ["View All Restaurants",
                            "Add a Restaurant",
                            "Add a Review",
-                           "Random Pick (with filters)"])
+                           "Random"])
 
 if action == "Add a Restaurant":
     st.header("Add New Restaurant")
