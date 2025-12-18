@@ -50,10 +50,10 @@ st.markdown("Add, edit, delete, review, and randomly pick Chicago eats!")
 st.sidebar.header("Actions")
 action = st.sidebar.radio(
     "What do you want to do?",
-    ["View All Restaurants",
-     "Add a Restaurant",
+    ["View All Places",
+     "Add a Place",
      "Add a Review",
-     "Random Pick (with filters)"]
+     "Random Pick"]
 )
 
 # Helper to delete restaurant and its photos
