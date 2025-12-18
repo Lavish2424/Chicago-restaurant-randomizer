@@ -24,7 +24,7 @@ if "restaurants" not in st.session_state:
 restaurants = st.session_state.restaurants
 
 st.title("🍽️ Chicago Restaurant Randomizer")
-st.markdown("A shared list for you and your partner — add places, review them, and let fate decide where to eat next!")
+st.markdown("Add places, review them, and let fate decide where to eat next!")
 
 # Sidebar for actions
 st.sidebar.header("Actions")
