@@ -198,6 +198,28 @@ elif action == "Add a Review":
 
 elif action == "View All Restaurants":
     st.header("All Restaurants")
+elif action == "View All Restaurants":
+    st.header("All Restaurants")
+    
+    if not restaurants:
+        st.info("No restaurants added yet.")
+    else:
+        # Add search bar
+        search_term = st.text_input("🔍 Search restaurants by name, cuisine, or neighborhood")
+        
+        filtered_restaurants = restaurants
+        if search_term:
+            search_lower = search_term.lower()
+            filtered_restaurants = [
+                r for r in restaurants
+                if search_lower in r["name"].lower()
+                or search_lower in r["cuisine"].lower()
+                or search_lower in r["location"].lower()
+            ]
+            st.write(f"**Found {len(filtered_restaurants)} restaurant(s)** matching '{search_term}'")
+        
+        for idx, r in enumerate(sorted(filtered_restaurants, key=lambda x: x["name"].lower())):
+            # ... rest of your existing expander code remains the same
     if not restaurants:
         st.info("No restaurants added yet.")
     else:
