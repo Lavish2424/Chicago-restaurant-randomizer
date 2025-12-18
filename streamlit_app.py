@@ -142,4 +142,4 @@ else:  # Random Pick with filters
 
 # Footer
 st.sidebar.markdown("---")
-st.sidebar.caption("Built with ❤️ using Streamlit • Shared between you two")
+st.sidebar.caption("Built by Alan made for us ❤️")
