@@ -44,7 +44,6 @@ def load_data():
         try:
             with open(DATA_FILE, "r") as f:
                 data = json.load(f)
-                # Ensure all places have favorite field
                 for place in data:
                     if "favorite" not in place:
                         place["favorite"] = False
@@ -121,24 +120,34 @@ def toggle_favorite(idx):
     save_data(restaurants)
     st.rerun()
 
-# Helper function for Google Maps link
 def google_maps_link(address, name=""):
     query = f"{name}, {address}" if name else address
     encoded = urllib.parse.quote(query)
     return f"https://www.google.com/maps/search/?api=1&query={encoded}"
 
-# Determine which places to show
-if action == "Favorites ❤️":
-    display_places = [r for r in restaurants if r.get("favorite", False)]
+# Set page header based on action
+if action == "View All Places":
+    st.header("All Places")
+elif action == "Favorites ❤️":
     st.header("❤️ Your Favorite Places")
-    if not display_places:
-        st.info("No favorites yet! Go to 'View All Places' and tap ❤️ on your top spots.")
-else:
-    display_places = restaurants
-    st.header("All Places" if action == "View All Places" else "Add New Place")
+elif action == "Add a Place":
+    st.header("Add New Place")
+elif action == "Add a Review":
+    st.header("Leave a Review")
+elif action == "Random Pick (with filters)":
+    st.header("🎲 Random Place Picker")
+    st.markdown("Apply filters below, then let fate decide!")
 
+# View All / Favorites logic
 if action in ["View All Places", "Favorites ❤️"]:
-    if display_places:
+    display_places = [r for r in restaurants if r.get("favorite", False)] if action == "Favorites ❤️" else restaurants
+    
+    if not display_places:
+        if action == "Favorites ❤️":
+            st.info("No favorites yet! Go to 'View All Places' and tap ❤️ on your top spots.")
+        else:
+            st.info("No places added yet.")
+    else:
         search_term = st.text_input("🔍 Search by name, cuisine, or neighborhood")
         filtered = display_places
         if search_term:
@@ -152,7 +161,6 @@ if action in ["View All Places", "Favorites ❤️"]:
             st.write(f"**Found {len(filtered)} place(s)** matching '{search_term}'")
 
         for idx, r in enumerate(sorted(filtered, key=lambda x: x["name"].lower())):
-            # Find global index for toggle
             global_idx = restaurants.index(r)
             type_icon = " 🍸" if r.get("type") == "cocktail_bar" else " 🍽️"
             fav_icon = " ❤️" if r.get("favorite", False) else ""
@@ -207,7 +215,7 @@ if action in ["View All Places", "Favorites ❤️"]:
                 else:
                     st.write("_No reviews yet — be the first!_")
 
-        # Edit form
+        # Edit form (only shown in View All / Favorites)
         if "editing_index" in st.session_state:
             edit_idx = st.session_state.editing_index
             r = restaurants[edit_idx]
@@ -290,7 +298,6 @@ if action in ["View All Places", "Favorites ❤️"]:
                         save_edited_restaurant(edit_idx, updated_data, new_photos, photos_to_delete)
 
 elif action == "Add a Place":
-    st.header("Add New Place")
     with st.form("add_place"):
         name = st.text_input("Name*", placeholder="e.g., Lou Malnati's")
         
@@ -365,7 +372,6 @@ elif action == "Add a Place":
                 st.rerun()
 
 elif action == "Add a Review":
-    st.header("Leave a Review")
     if not restaurants:
         st.info("No places yet — add one first!")
     else:
@@ -406,8 +412,6 @@ elif action == "Add a Review":
                     st.rerun()
 
 else:  # Random Pick
-    st.header("🎲 Random Place Picker")
-    st.markdown("Apply filters below, then let fate decide!")
     if not restaurants:
         st.info("No places yet — add some first!")
     else:
@@ -476,7 +480,6 @@ else:  # Random Pick
                     maps_url = google_maps_link(choice.get("address", ""), choice["name"])
                     st.markdown(f"[📍 Open in Google Maps]({maps_url})")
                     
-                    # Favorite button in random result
                     global_idx = restaurants.index(choice)
                     if st.button("❤️ Add to Favorites" if not choice.get("favorite", False) else "❤️ Remove from Favorites",
                                  key=f"rand_fav_{global_idx}"):
