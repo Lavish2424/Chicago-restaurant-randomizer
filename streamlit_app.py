@@ -361,8 +361,6 @@ else:  # Random Pick
             filtered = [r for r in filtered if r["price"] in price_filter]
         if location_filter:
             filtered = [r for r in filtered if r["location"] in location_filter]
-        if exclude_visited:
-            filtered = [r for r in filtered if not r.get("visited", False)]
 
         st.write(f"**{len(filtered)} restaurant(s)** match your filters.")
 
