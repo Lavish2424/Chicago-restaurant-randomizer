@@ -207,4 +207,3 @@ else:  # Random Pick with filters
                 choice = random.choice(filtered)
                 st.balloons()
                 st.markdown(f"## 🍴 Your destiny: **{choice['name']}**")
-                st.write(f"**Cuisine:** {choice['cuisine']} • **Price:** {choice['price']} • **Location:** {choice['
