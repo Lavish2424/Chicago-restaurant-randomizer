@@ -2,6 +2,7 @@ import streamlit as st
 import json
 import os
 import random
+import urllib.parse
 from datetime import datetime
 
 DATA_FILE = "restaurants.json"
@@ -109,6 +110,12 @@ def save_edited_restaurant(index, updated_data, new_photos, photos_to_delete):
     st.success(f"{updated_data['name']} updated successfully!")
     st.rerun()
 
+# Helper function for Google Maps link
+def google_maps_link(address, name=""):
+    query = f"{name}, {address}" if name else address
+    encoded = urllib.parse.quote(query)
+    return f"https://www.google.com/maps/search/?api=1&query={encoded}"
+
 if action == "Add a Place":
     st.header("Add New Place")
     with st.form("add_place"):
@@ -193,8 +200,6 @@ elif action == "Add a Review":
 
         with st.form("add_review", clear_on_submit=True):
             st.write("**Your Rating**")
-
-            # Graphical star rating using radio buttons styled as stars
             rating = st.radio(
                 "Select your rating",
                 options=[1, 2, 3, 4, 5],
@@ -254,6 +259,8 @@ elif action == "View All Places":
                 col1, col2 = st.columns([3, 1])
                 with col1:
                     st.write(f"**Address:** {r.get('address', 'Not provided')}")
+                    maps_url = google_maps_link(r.get("address", ""), r["name"])
+                    st.markdown(f"[📍 Open in Google Maps]({maps_url})")
                 with col2:
                     if st.button("Edit ✏️", key=f"edit_{idx}"):
                         st.session_state.editing_index = idx
@@ -433,6 +440,10 @@ else:  # Random Pick
                     st.markdown(f"## Your pick: **{choice['name']}**{type_tag}")
                     st.write(f"**Cuisine:** {choice['cuisine']} • **Price:** {choice['price']} • **Location:** {choice['location']}")
                     st.write(f"**Address:** {choice.get('address', 'Not provided')}")
+                    
+                    # Google Maps link in random pick
+                    maps_url = google_maps_link(choice.get("address", ""), choice["name"])
+                    st.markdown(f"[📍 Open in Google Maps]({maps_url})")
                     
                     if choice.get("photos"):
                         st.markdown("### Photos")
