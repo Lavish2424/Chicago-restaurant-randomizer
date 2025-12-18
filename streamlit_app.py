@@ -19,6 +19,7 @@ NEIGHBORHOODS = [
     "Chinatown",
     "Pilsen",
     "West Town"
+    "Suburb"
 ]
 
 # Load data
