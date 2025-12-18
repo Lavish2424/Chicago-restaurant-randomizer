@@ -3,13 +3,23 @@ import json
 import os
 import random
 from datetime import datetime
-from PIL import Image
 
 DATA_FILE = "restaurants.json"
 IMAGES_DIR = "images"
 
 # Create images directory if it doesn't exist
 os.makedirs(IMAGES_DIR, exist_ok=True)
+
+# Predefined neighborhoods
+NEIGHBORHOODS = [
+    "Fulton Market",
+    "River North",
+    "Gold Coast",
+    "South Loop",
+    "Chinatown",
+    "Pilsen",
+    "West Town"
+]
 
 # Load data
 def load_data():
@@ -52,7 +62,17 @@ if action == "Add a Restaurant":
         name = st.text_input("Restaurant Name*", placeholder="e.g., Lou Malnati's")
         cuisine = st.text_input("Cuisine*", placeholder="e.g., Italian, Deep Dish Pizza")
         price = st.selectbox("Price Range*", ["$", "$$", "$$$", "$$$$"])
-        location = st.text_input("Neighborhood/Location in Chicago*", placeholder="e.g., River North")
+        
+        # Neighborhood dropdown with "Other" option
+        location_option = st.selectbox(
+            "Neighborhood/Location in Chicago*",
+            options=NEIGHBORHOODS + ["Other"]
+        )
+        if location_option == "Other":
+            location = st.text_input("Enter custom neighborhood*", placeholder="e.g., Logan Square")
+        else:
+            location = location_option
+        
         address = st.text_input("Address*", placeholder="e.g., 123 N Wacker Dr, Chicago, IL")
         uploaded_photos = st.file_uploader(
             "Upload Photos (optional, multiple allowed)",
@@ -71,11 +91,9 @@ if action == "Add a Restaurant":
                 photo_paths = []
                 if uploaded_photos:
                     for photo in uploaded_photos:
-                        # Save each photo
                         safe_name = "".join(c for c in name if c.isalnum() or c in " -_").replace(" ", "_")
                         filename = f"{safe_name}_{photo.name}"
                         filepath = os.path.join(IMAGES_DIR, filename)
-                        # Avoid overwriting by adding a number if needed
                         counter = 1
                         original_filepath = filepath
                         while os.path.exists(filepath):
@@ -92,7 +110,7 @@ if action == "Add a Restaurant":
                     "price": price,
                     "location": location.strip(),
                     "address": address.strip(),
-                    "photos": photo_paths,  # List of file paths
+                    "photos": photo_paths,
                     "reviews": []
                 })
                 save_data(restaurants)
@@ -189,26 +207,4 @@ else:  # Random Pick with filters
                 choice = random.choice(filtered)
                 st.balloons()
                 st.markdown(f"## 🍴 Your destiny: **{choice['name']}**")
-                st.write(f"**Cuisine:** {choice['cuisine']} • **Price:** {choice['price']} • **Location:** {choice['location']}")
-                st.write(f"**Address:** {choice.get('address', 'Not provided')}")
-
-                if choice.get("photos"):
-                    st.markdown("### Photos")
-                    cols = st.columns(3)
-                    for idx, photo_path in enumerate(choice["photos"]):
-                        if os.path.exists(photo_path):
-                            cols[idx % 3].image(photo_path, use_column_width=True)
-
-                if choice["reviews"]:
-                    st.markdown("### Recent Reviews")
-                    for rev in choice["reviews"][-3:]:
-                        st.write(f"**{rev['rating']}⭐** — {rev['reviewer']} ({rev['date']})")
-                        st.write(f"_{rev['comment']}_")
-                else:
-                    st.info("No reviews yet — you'll be the pioneer!")
-        else:
-            st.warning("No restaurants match your filters — try broadening them!")
-
-# Footer
-st.sidebar.markdown("---")
-st.sidebar.caption("Built by Alan • Made for us ❤️ • Chicago eats only!")
+                st.write(f"**Cuisine:** {choice['cuisine']} • **Price:** {choice['price']} • **Location:** {choice['
