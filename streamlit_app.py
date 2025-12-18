@@ -44,13 +44,9 @@ def load_data():
         try:
             with open(DATA_FILE, "r") as f:
                 data = json.load(f)
-                # Backward compatibility
                 for place in data:
                     if "favorite" not in place:
                         place["favorite"] = False
-                    for review in place.get("reviews", []):
-                        if "date" not in review:
-                            review["date"] = "Unknown date"
                 return data
         except json.JSONDecodeError:
             st.error("Data file is corrupted. Starting with empty list.")
@@ -68,16 +64,6 @@ restaurants = st.session_state.restaurants
 
 st.title("🍽️ Chicago Restaurant/Bar Randomizer")
 st.markdown("Add, edit, delete, review, favorite, and randomly pick Chicago eats & drinks!")
-
-# Sidebar: Your name for review editing
-st.sidebar.header("Your Info")
-current_reviewer = st.sidebar.text_input(
-    "Your name (to edit/delete your reviews)",
-    value=st.session_state.get("current_reviewer", ""),
-    key="reviewer_input"
-)
-if current_reviewer:
-    st.session_state.current_reviewer = current_reviewer.strip()
 
 st.sidebar.header("Actions")
 action = st.sidebar.radio(
@@ -139,7 +125,7 @@ def google_maps_link(address, name=""):
     encoded = urllib.parse.quote(query)
     return f"https://www.google.com/maps/search/?api=1&query={encoded}"
 
-# Header based on action
+# Set page header based on action
 if action == "View All Places":
     st.header("All Places")
 elif action == "Favorites ❤️":
@@ -152,84 +138,36 @@ elif action == "Random Pick (with filters)":
     st.header("🎲 Random Place Picker")
     st.markdown("Apply filters below, then let fate decide!")
 
-# Helper to display reviews with edit/delete options
-def display_reviews(place, place_global_idx):
-    if place["reviews"]:
-        st.write("**Reviews:**")
-        for rev_idx, rev in enumerate(reversed(place["reviews"])):
-            original_rev_idx = len(place["reviews"]) - 1 - rev_idx
-            stars = "★" * rev["rating"] + "☆" * (5 - rev["rating"])
-            reviewer_name = rev["reviewer"]
-            is_mine = current_reviewer and current_reviewer.lower() == reviewer_name.lower()
-
-            col_text, col_action = st.columns([4, 1])
-            with col_text:
-                st.write(f"**{stars}** — {reviewer_name} ({rev['date']})")
-                st.write(rev["comment"])
-            with col_action:
-                if is_mine:
-                    if st.button("Edit ✏️", key=f"edit_rev_{place_global_idx}_{original_rev_idx}"):
-                        st.session_state.editing_review = (place_global_idx, original_rev_idx)
-                        st.rerun()
-                    if st.button("Delete 🗑️", key=f"del_rev_{place_global_idx}_{original_rev_idx}"):
-                        del place["reviews"][original_rev_idx]
-                        save_data(restaurants)
-                        st.success("Your review was deleted.")
-                        st.rerun()
-            st.markdown("---")
-    else:
-        st.write("_No reviews yet — be the first!_")
-
-    # Edit review form
-    if "editing_review" in st.session_state:
-        p_idx, r_idx = st.session_state.editing_review
-        if p_idx == place_global_idx:
-            review = place["reviews"][r_idx]
-            st.markdown("#### ✏️ Editing your review")
-            with st.form(f"edit_rev_form_{p_idx}_{r_idx}"):
-                new_rating = st.radio(
-                    "Rating",
-                    options=[1, 2, 3, 4, 5],
-                    index=review["rating"] - 1,
-                    format_func=lambda x: "★" * x + "☆" * (5 - x),
-                    horizontal=True,
-                    label_visibility="collapsed"
-                )
-                new_comment = st.text_area("Comment", value=review["comment"])
-                col_save, col_cancel = st.columns(2)
-                if col_cancel.form_submit_button("Cancel"):
-                    del st.session_state.editing_review
-                    st.rerun()
-                if col_save.form_submit_button("Save Changes"):
-                    if not new_comment.strip():
-                        st.error("Comment cannot be empty!")
-                    else:
-                        place["reviews"][r_idx]["rating"] = new_rating
-                        place["reviews"][r_idx]["comment"] = new_comment.strip()
-                        save_data(restaurants)
-                        del st.session_state.editing_review
-                        st.success("Review updated!")
-                        st.rerun()
-
-# View All / Favorites
+# View All / Favorites logic
 if action in ["View All Places", "Favorites ❤️"]:
     display_places = [r for r in restaurants if r.get("favorite", False)] if action == "Favorites ❤️" else restaurants
     
     if not display_places:
-        st.info("No favorites yet! Go to 'View All Places' and tap ❤️ on your top spots." if action == "Favorites ❤️" else "No places added yet.")
+        if action == "Favorites ❤️":
+            st.info("No favorites yet! Go to 'View All Places' and tap ❤️ on your top spots.")
+        else:
+            st.info("No places added yet.")
     else:
         search_term = st.text_input("🔍 Search by name, cuisine, or neighborhood")
         filtered = display_places
         if search_term:
             search_lower = search_term.lower()
-            filtered = [r for r in filtered if search_lower in r["name"].lower() or search_lower in r["cuisine"].lower() or search_lower in r["location"].lower()]
+            filtered = [
+                r for r in filtered
+                if search_lower in r["name"].lower()
+                or search_lower in r["cuisine"].lower()
+                or search_lower in r["location"].lower()
+            ]
             st.write(f"**Found {len(filtered)} place(s)** matching '{search_term}'")
 
         for idx, r in enumerate(sorted(filtered, key=lambda x: x["name"].lower())):
             global_idx = restaurants.index(r)
             type_icon = " 🍸" if r.get("type") == "cocktail_bar" else " 🍽️"
             fav_icon = " ❤️" if r.get("favorite", False) else ""
-            review_text = f" • {sum(rev['rating'] for rev in r['reviews'])/len(r['reviews']):.1f}⭐ ({len(r['reviews'])})" if r["reviews"] else ""
+            review_text = ""
+            if r["reviews"]:
+                avg = sum(rev["rating"] for rev in r["reviews"]) / len(r["reviews"])
+                review_text = f" • {avg:.1f}⭐ ({len(r['reviews'])})"
 
             with st.expander(f"{r['name']}{type_icon}{fav_icon} • {r['cuisine']} • {r['price']} • {r['location']}{review_text}"):
                 col1, col2 = st.columns([3, 1])
@@ -238,7 +176,8 @@ if action in ["View All Places", "Favorites ❤️"]:
                     maps_url = google_maps_link(r.get("address", ""), r["name"])
                     st.markdown(f"[📍 Open in Google Maps]({maps_url})")
                 with col2:
-                    if st.button("❤️ Favorite" if not r.get("favorite", False) else "❤️ Unfavorite", key=f"fav_btn_{global_idx}"):
+                    if st.button("❤️ Favorite" if not r.get("favorite", False) else "❤️ Unfavorite",
+                                 key=f"fav_btn_{global_idx}"):
                         toggle_favorite(global_idx)
 
                     if st.button("Edit ✏️", key=f"edit_{global_idx}"):
@@ -267,9 +206,16 @@ if action in ["View All Places", "Favorites ❤️"]:
                         if os.path.exists(photo_path):
                             cols[p_idx % 3].image(photo_path, use_column_width=True)
 
-                display_reviews(r, global_idx)
+                if r["reviews"]:
+                    st.write("**Reviews:**")
+                    for rev in reversed(r["reviews"]):
+                        st.write(f"**{'★' * rev['rating']}{'☆' * (5 - rev['rating'])}** — {rev['reviewer']} ({rev['date']})")
+                        st.write(f"{rev['comment']}")
+                        st.markdown("---")
+                else:
+                    st.write("_No reviews yet — be the first!_")
 
-        # Edit place form
+        # Edit form (only shown in View All / Favorites)
         if "editing_index" in st.session_state:
             edit_idx = st.session_state.editing_index
             r = restaurants[edit_idx]
@@ -278,7 +224,6 @@ if action in ["View All Places", "Favorites ❤️"]:
 
             with st.form("edit_restaurant"):
                 new_name = st.text_input("Name*", value=r["name"])
-                
                 current_cuisine = r["cuisine"]
                 cuisine_option = st.selectbox(
                     "Cuisine/Style*",
@@ -390,7 +335,8 @@ elif action == "Add a Place":
 
         submitted = st.form_submit_button("Add Place")
         if submitted:
-            if not all([name, cuisine, location, address]):
+            required_fields = [name, cuisine, location, address]
+            if not all(required_fields):
                 st.error("Please fill in all required fields (*)")
             elif any(r["name"].lower() == name.lower() for r in restaurants):
                 st.warning("This place already exists!")
@@ -443,20 +389,18 @@ elif action == "Add a Review":
             )
 
             comment = st.text_area("Your thoughts*", placeholder="What did you like? Any standout dishes or drinks?")
-            reviewer = st.text_input("Your name*", value=current_reviewer or "", placeholder="e.g., Alex")
+            reviewer = st.text_input("Your name (optional)", placeholder="e.g., Alex")
 
             submitted = st.form_submit_button("Submit Review")
 
             if submitted:
-                if not reviewer.strip():
-                    st.error("Please enter your name!")
-                elif not comment.strip():
+                if not comment.strip():
                     st.error("Please write a comment!")
                 else:
                     review = {
                         "rating": rating,
                         "comment": comment.strip(),
-                        "reviewer": reviewer.strip(),
+                        "reviewer": reviewer.strip() or "Anonymous",
                         "date": datetime.now().strftime("%B %d, %Y")
                     }
                     for r in restaurants:
@@ -464,7 +408,6 @@ elif action == "Add a Review":
                             r["reviews"].append(review)
                             break
                     save_data(restaurants)
-                    st.session_state.current_reviewer = reviewer.strip()
                     st.success("Thank you! Review added 🎉")
                     st.rerun()
 
@@ -549,8 +492,14 @@ else:  # Random Pick
                             if os.path.exists(photo_path):
                                 cols[idx % 3].image(photo_path, use_column_width=True)
                                 
-                    display_reviews(choice, global_idx)
-                    
+                    if choice["reviews"]:
+                        st.markdown("### Recent Reviews")
+                        for rev in choice["reviews"][-3:]:
+                            st.write(f"**{'★' * rev['rating']}{'☆' * (5 - rev['rating'])}** — {rev['reviewer']} ({rev['date']})")
+                            st.write(f"_{rev['comment']}_")
+                    else:
+                        st.info("No reviews yet — you'll be the pioneer!")
+                        
                     if st.button("🎲 Pick Again!", type="secondary", use_container_width=True, key="again_button"):
                         choice = random.choice(filtered)
                         st.session_state.last_random_choice = choice
