@@ -123,7 +123,6 @@ if action == "Add a Restaurant":
        
         address = st.text_input("Address*", placeholder="e.g., 123 N Wacker Dr, Chicago, IL")
         
-        visited = st.checkbox("Already visited? ✅")
         
         uploaded_photos = st.file_uploader(
             "Upload Photos (optional, multiple allowed)",
