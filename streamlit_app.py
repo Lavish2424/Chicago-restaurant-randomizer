@@ -207,3 +207,6 @@ else:  # Random Pick with filters
                 choice = random.choice(filtered)
                 st.balloons()
                 st.markdown(f"## 🍴 Your destiny: **{choice['name']}**")
+# Footer
+st.sidebar.markdown("---")
+st.sidebar.caption("Built by Alan made for us ❤️")
