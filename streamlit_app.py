@@ -19,7 +19,6 @@ NEIGHBORHOODS = [
     "West Town"
 ]
 
-# Predefined cuisines
 CUISINES = [
     "Chinese",
     "Italian",
@@ -115,7 +114,6 @@ if action == "Add a Place":
     with st.form("add_place"):
         name = st.text_input("Name*", placeholder="e.g., Lou Malnati's")
         
-        # Cuisine dropdown with Other option
         cuisine_option = st.selectbox("Cuisine/Style*", options=CUISINES)
         if cuisine_option == "Other":
             cuisine = st.text_input("Enter custom cuisine*", placeholder="e.g., Vietnamese, Mediterranean")
@@ -288,7 +286,6 @@ elif action == "View All Places":
             with st.form("edit_restaurant"):
                 new_name = st.text_input("Name*", value=r["name"])
                 
-                # Cuisine dropdown in edit
                 current_cuisine = r["cuisine"]
                 cuisine_option = st.selectbox(
                     "Cuisine/Style*",
@@ -339,3 +336,115 @@ elif action == "View All Places":
                 col_save, col_cancel = st.columns(2)
                 with col_save:
                     save_submitted = st.form_submit_button("Save Changes")
+                with col_cancel:
+                    cancel = st.form_submit_button("Cancel")
+
+                if cancel:
+                    del st.session_state.editing_index
+                    st.rerun()
+
+                if save_submitted:
+                    if not all([new_name, new_cuisine, new_location, new_address]):
+                        st.error("All required fields must be filled.")
+                    elif new_name.lower() != r["name"].lower() and any(existing["name"].lower() == new_name.lower() for existing in restaurants if existing != r):
+                        st.warning("Another place with this name already exists!")
+                    else:
+                        updated_data = {
+                            "name": new_name.strip(),
+                            "cuisine": new_cuisine.strip(),
+                            "price": new_price,
+                            "location": new_location.strip(),
+                            "address": new_address.strip(),
+                            "type": new_type,
+                        }
+                        save_edited_restaurant(edit_idx, updated_data, new_photos, photos_to_delete)
+
+else:  # Random Pick
+    st.header("🎲 Random Place Picker")
+    st.markdown("Apply filters below, then let fate decide!")
+    if not restaurants:
+        st.info("No places yet — add some first!")
+    else:
+        col1, col2 = st.columns(2)
+        with col1:
+            all_cuisines = sorted({r["cuisine"] for r in restaurants})
+            cuisine_filter = st.multiselect("Cuisine", options=all_cuisines, default=[])
+            
+            all_prices = sorted({r["price"] for r in restaurants}, key=lambda x: len(x))
+            price_filter = st.multiselect("Price Range", options=all_prices, default=[])
+            
+            type_filter = st.selectbox(
+                "Type",
+                options=["all", "restaurant", "cocktail_bar"],
+                format_func=lambda x: {
+                    "all": "All Places",
+                    "restaurant": "Only Restaurants 🍽️",
+                    "cocktail_bar": "Only Cocktail Bars 🍸"
+                }[x],
+                index=0
+            )
+            
+        with col2:
+            all_locations = sorted({r["location"] for r in restaurants})
+            location_filter = st.multiselect("Neighborhood", options=all_locations, default=[])
+
+        filtered = restaurants.copy()
+        
+        if type_filter == "restaurant":
+            filtered = [r for r in filtered if r.get("type", "restaurant") == "restaurant"]
+        elif type_filter == "cocktail_bar":
+            filtered = [r for r in filtered if r.get("type") == "cocktail_bar"]
+        
+        if cuisine_filter:
+            filtered = [r for r in filtered if r["cuisine"] in cuisine_filter]
+        if price_filter:
+            filtered = [r for r in filtered if r["price"] in price_filter]
+        if location_filter:
+            filtered = [r for r in filtered if r["location"] in location_filter]
+
+        st.write(f"**{len(filtered)} place(s)** match your filters.")
+        
+        if len(filtered) == 0:
+            st.warning("No places match your current filters. Try broadening them!")
+        else:
+            if st.button("🎲 Pick Random Place!", type="primary", use_container_width=True, key="pick_button"):
+                choice = random.choice(filtered)
+                st.session_state.last_random_choice = choice
+                st.balloons()
+                st.rerun()
+                
+            if "last_random_choice" in st.session_state:
+                choice = st.session_state.last_random_choice
+                # Only show if it still matches current filters
+                if choice in filtered:
+                    type_tag = " 🍸 Cocktail Bar" if choice.get("type") == "cocktail_bar" else " 🍽️ Restaurant"
+                    st.markdown(f"## Your pick: **{choice['name']}**{type_tag}")
+                    st.write(f"**Cuisine:** {choice['cuisine']} • **Price:** {choice['price']} • **Location:** {choice['location']}")
+                    st.write(f"**Address:** {choice.get('address', 'Not provided')}")
+                    
+                    if choice.get("photos"):
+                        st.markdown("### Photos")
+                        cols = st.columns(3)
+                        for idx, photo_path in enumerate(choice["photos"]):
+                            if os.path.exists(photo_path):
+                                cols[idx % 3].image(photo_path, use_column_width=True)
+                                
+                    if choice["reviews"]:
+                        st.markdown("### Recent Reviews")
+                        for rev in choice["reviews"][-3:]:
+                            st.write(f"**{rev['rating']}⭐** — {rev['reviewer']} ({rev['date']})")
+                            st.write(f"_{rev['comment']}_")
+                    else:
+                        st.info("No reviews yet — you'll be the pioneer!")
+                        
+                    if st.button("🎲 Pick Again!", type="secondary", use_container_width=True, key="again_button"):
+                        choice = random.choice(filtered)
+                        st.session_state.last_random_choice = choice
+                        st.rerun()
+                else:
+                    st.info("Your previous pick no longer matches the filters — pick a new one!")
+                    if "last_random_choice" in st.session_state:
+                        del st.session_state.last_random_choice
+
+st.sidebar.markdown("---")
+st.sidebar.caption("Built by Alan, made for us ❤️")
