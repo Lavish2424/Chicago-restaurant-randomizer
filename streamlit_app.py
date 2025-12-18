@@ -50,7 +50,7 @@ st.markdown("Add, edit, delete, review, and randomly pick Chicago eats!")
 st.sidebar.header("Actions")
 action = st.sidebar.radio(
     "What do you want to do?",
-    ["View All Restaurants",
+    ["View All Restaurant/Bars",
      "Add a Restaurant",
      "Add a Review",
      "Random Pick (with filters)"]
