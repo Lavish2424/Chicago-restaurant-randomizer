@@ -362,4 +362,4 @@ else:  # Random Pick (unchanged)
 
 # Footer
 st.sidebar.markdown("---")
-st.sidebar.caption("Built by Alan • Made for us ❤️")
+st.sidebar.caption("Built by Alan, made for us ❤️")
