@@ -29,8 +29,11 @@ CUISINES = [
     "Thai",
     "French",
     "Korean",
+    "Pizza",
+    "Burgers",
     "Seafood",
     "Steakhouse",
+    "Bar Food",
     "Cocktails",
     "Other"
 ]
@@ -187,11 +190,24 @@ elif action == "Add a Review":
     else:
         names = [r["name"] for r in restaurants]
         selected = st.selectbox("Choose place to review", names)
-        with st.form("add_review"):
-            rating = st.slider("Rating (stars)", 1, 5, 4)
+
+        with st.form("add_review", clear_on_submit=True):
+            st.write("**Your Rating**")
+
+            # Graphical star rating using radio buttons styled as stars
+            rating = st.radio(
+                "Select your rating",
+                options=[1, 2, 3, 4, 5],
+                format_func=lambda x: "★" * x + "☆" * (5 - x),
+                horizontal=True,
+                label_visibility="collapsed"
+            )
+
             comment = st.text_area("Your thoughts*", placeholder="What did you like? Any standout dishes or drinks?")
             reviewer = st.text_input("Your name (optional)", placeholder="e.g., Alex")
+
             submitted = st.form_submit_button("Submit Review")
+
             if submitted:
                 if not comment.strip():
                     st.error("Please write a comment!")
@@ -268,7 +284,7 @@ elif action == "View All Places":
                 if r["reviews"]:
                     st.write("**Reviews:**")
                     for rev in reversed(r["reviews"]):
-                        st.write(f"**{rev['rating']}⭐** — {rev['reviewer']} ({rev['date']})")
+                        st.write(f"**{'★' * rev['rating']}{'☆' * (5 - rev['rating'])}** — {rev['reviewer']} ({rev['date']})")
                         st.write(f"{rev['comment']}")
                         st.markdown("---")
                 else:
@@ -412,7 +428,6 @@ else:  # Random Pick
                 
             if "last_random_choice" in st.session_state:
                 choice = st.session_state.last_random_choice
-                # Only show if it still matches current filters
                 if choice in filtered:
                     type_tag = " 🍸 Cocktail Bar" if choice.get("type") == "cocktail_bar" else " 🍽️ Restaurant"
                     st.markdown(f"## Your pick: **{choice['name']}**{type_tag}")
@@ -429,7 +444,7 @@ else:  # Random Pick
                     if choice["reviews"]:
                         st.markdown("### Recent Reviews")
                         for rev in choice["reviews"][-3:]:
-                            st.write(f"**{rev['rating']}⭐** — {rev['reviewer']} ({rev['date']})")
+                            st.write(f"**{'★' * rev['rating']}{'☆' * (5 - rev['rating'])}** — {rev['reviewer']} ({rev['date']})")
                             st.write(f"_{rev['comment']}_")
                     else:
                         st.info("No reviews yet — you'll be the pioneer!")
