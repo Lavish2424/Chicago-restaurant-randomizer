@@ -110,15 +110,12 @@ if action == "Add a Restaurant":
       
         address = st.text_input("Address*", placeholder="e.g., 123 N Wacker Dr, Chicago, IL")
         
-        # NEW: Dropdown instead of checkbox
         place_type = st.selectbox(
             "Type*",
             options=["restaurant", "cocktail_bar"],
             format_func=lambda x: "Restaurant 🍽️" if x == "restaurant" else "Cocktail Bar 🍸",
             index=0
         )
-        
-        visited = st.checkbox("Already visited? ✅", value=False)
        
         uploaded_photos = st.file_uploader(
             "Upload Photos (optional, multiple allowed)",
@@ -152,8 +149,7 @@ if action == "Add a Restaurant":
                     "price": price,
                     "location": location.strip(),
                     "address": address.strip(),
-                    "visited": visited,
-                    "type": place_type,  # "restaurant" or "cocktail_bar"
+                    "type": place_type,
                     "photos": photo_paths,
                     "reviews": []
                 })
@@ -208,7 +204,7 @@ elif action == "View All Restaurants":
                 or search_lower in r["cuisine"].lower()
                 or search_lower in r["location"].lower()
             ]
-            st.write(f"**Found {len(filtered_restaurants)} restaurant(s)** matching '{search_term}'")
+            st.write(f"**Found {len(filtered_restaurants)} place(s)** matching '{search_term}'")
        
         for idx, r in enumerate(sorted(filtered_restaurants, key=lambda x: x["name"].lower())):
             type_icon = " 🍸" if r.get("type") == "cocktail_bar" else " 🍽️"
@@ -217,9 +213,7 @@ elif action == "View All Restaurants":
                 avg = sum(rev["rating"] for rev in r["reviews"]) / len(r["reviews"])
                 review_text = f" • {avg:.1f}⭐ ({len(r['reviews'])})"
            
-            visited_badge = " ✅ Visited" if r.get("visited", False) else ""
-           
-            with st.expander(f"{r['name']}{type_icon}{visited_badge} • {r['cuisine']} • {r['price']} • {r['location']}{review_text}"):
+            with st.expander(f"{r['name']}{type_icon} • {r['cuisine']} • {r['price']} • {r['location']}{review_text}"):
                 col1, col2 = st.columns([3, 1])
                 with col1:
                     st.write(f"**Address:** {r.get('address', 'Not provided')}")
@@ -282,10 +276,7 @@ elif action == "View All Restaurants":
                     new_location = location_option
               
                 new_address = st.text_input("Address*", value=r.get("address", ""))
-               
-                new_visited = st.checkbox("Already visited? ✅", value=r.get("visited", False))
                 
-                # Dropdown in edit form
                 new_type = st.selectbox(
                     "Type*",
                     options=["restaurant", "cocktail_bar"],
@@ -333,7 +324,6 @@ elif action == "View All Restaurants":
                             "price": new_price,
                             "location": new_location.strip(),
                             "address": new_address.strip(),
-                            "visited": new_visited,
                             "type": new_type,
                         }
                         save_edited_restaurant(edit_idx, updated_data, new_photos, photos_to_delete)
@@ -351,7 +341,6 @@ else:  # Random Pick
             all_prices = sorted({r["price"] for r in restaurants}, key=lambda x: len(x))
             price_filter = st.multiselect("Price Range", options=all_prices, default=[])
             
-            # Clean dropdown for type filter
             type_filter = st.selectbox(
                 "Type",
                 options=["all", "restaurant", "cocktail_bar"],
@@ -366,8 +355,6 @@ else:  # Random Pick
         with col2:
             all_locations = sorted({r["location"] for r in restaurants if r["location"]})
             location_filter = st.multiselect("Neighborhood", options=all_locations, default=[])
-            
-            exclude_visited = st.checkbox("Exclude already visited restaurants")
 
         filtered = restaurants.copy()
         
@@ -382,8 +369,6 @@ else:  # Random Pick
             filtered = [r for r in filtered if r["price"] in price_filter]
         if location_filter:
             filtered = [r for r in filtered if r["location"] in location_filter]
-        if exclude_visited:
-            filtered = [r for r in filtered if not r.get("visited", False)]
 
         st.write(f"**{len(filtered)} place(s)** match your filters.")
         
@@ -398,8 +383,7 @@ else:  # Random Pick
                 choice = st.session_state.last_random_choice
                 type_tag = " 🍸 Cocktail Bar" if choice.get("type") == "cocktail_bar" else " 🍽️ Restaurant"
                 st.markdown(f"## Your pick: **{choice['name']}**{type_tag}")
-                visited_tag = " ✅ (Already visited)" if choice.get("visited", False) else ""
-                st.write(f"**Cuisine:** {choice['cuisine']} • **Price:** {choice['price']} • **Location:** {choice['location']}{visited_tag}")
+                st.write(f"**Cuisine:** {choice['cuisine']} • **Price:** {choice['price']} • **Location:** {choice['location']}")
                 st.write(f"**Address:** {choice.get('address', 'Not provided')}")
                 
                 if choice.get("photos"):
