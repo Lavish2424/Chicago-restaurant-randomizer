@@ -29,11 +29,8 @@ CUISINES = [
     "Thai",
     "French",
     "Korean",
-    "Pizza",
-    "Burgers",
     "Seafood",
     "Steakhouse",
-    "Bar Food",
     "Cocktails",
     "Other"
 ]
