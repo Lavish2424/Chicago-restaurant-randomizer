@@ -1,625 +1,143 @@
 import streamlit as st
 import json
 import os
-import random
-import urllib.parse
-import uuid
 from datetime import datetime
 
 DATA_FILE = "restaurants.json"
-IMAGES_DIR = "images"
-os.makedirs(IMAGES_DIR, exist_ok=True)
 
-NEIGHBORHOODS = [
-    "Fulton Market",
-    "River North",
-    "Gold Coast",
-    "South Loop",
-    "Chinatown",
-    "Pilsen",
-    "West Town"
-]
-
-CUISINES = [
-    "Chinese",
-    "Italian",
-    "American",
-    "Mexican",
-    "Japanese",
-    "Indian",
-    "Thai",
-    "French",
-    "Korean",
-    "Pizza",
-    "Burgers",
-    "Seafood",
-    "Steakhouse",
-    "Bar Food",
-    "Cocktails",
-    "Other"
-]
-
+# Load data
 def load_data():
     if os.path.exists(DATA_FILE):
-        try:
-            with open(DATA_FILE, "r") as f:
-                data = json.load(f)
-                for place in data:
-                    if "favorite" not in place:
-                        place["favorite"] = False
-                    if "photos" not in place:
-                        place["photos"] = []
-                    if "reviews" not in place:
-                        place["reviews"] = []
-                return data
-        except json.JSONDecodeError:
-            st.error("Data file is corrupted. Starting with empty list.")
-            return []
+        with open(DATA_FILE, "r") as f:
+            return json.load(f)
     return []
 
+# Save data
 def save_data(data):
     with open(DATA_FILE, "w") as f:
         json.dump(data, f, indent=4)
 
+# Initialize data
 if "restaurants" not in st.session_state:
     st.session_state.restaurants = load_data()
 
 restaurants = st.session_state.restaurants
 
-# Smaller, elegant envelope animation
-st.markdown("""
-<style>
-.envelope-reveal {
-    perspective: 1200px;
-    width: 100%;
-    max-width: 520px;
-    margin: 30px auto;
-    position: relative;
-    height: 360px;
-}
+st.title("Chicago Restaurant Randomizer")
 
-.envelope-flap {
-    position: absolute;
-    top: 0;
-    left: 0;
-    width: 100%;
-    height: 180px;
-    background: linear-gradient(to bottom, #ff4444, #cc0000);
-    clip-path: polygon(0% 0%, 100% 0%, 50% 100%);
-    transform-origin: top;
-    transition: transform 1.4s ease-in-out;
-    z-index: 10;
-    box-shadow: 0 4px 15px rgba(0,0,0,0.3);
-}
-
-.revealed .envelope-flap {
-    transform: rotateX(-180deg);
-}
-
-.envelope-bottom {
-    position: absolute;
-    bottom: 0;
-    left: 0;
-    width: 100%;
-    height: 260px;
-    background: linear-gradient(to top, #ff4444, #ff7777);
-    clip-path: polygon(0% 35%, 50% 100%, 100% 35%, 100% 100%, 0% 100%);
-    box-shadow: 0 8px 25px rgba(0,0,0,0.3);
-}
-
-.envelope-content {
-    position: absolute;
-    top: 70px;
-    left: 20px;
-    right: 20px;
-    background: white;
-    border-radius: 10px;
-    padding: 24px;
-    box-shadow: 0 12px 35px rgba(0,0,0,0.3);
-    opacity: 0;
-    transform: translateY(50px);
-    transition: opacity 1s ease 0.7s, transform 1s ease 0.7s;
-}
-
-.revealed .envelope-content {
-    opacity: 1;
-    transform: translateY(0);
-}
-
-@media (max-width: 640px) {
-    .envelope-reveal {
-        max-width: 90%;
-        height: 380px;
-    }
-    .envelope-content {
-        left: 15px;
-        right: 15px;
-        padding: 20px;
-    }
-}
-</style>
-""", unsafe_allow_html=True)
-
-# Page title
-st.markdown("<h1 style='text-align: center;'>🍽️ Chicago Restaurant/Bar Randomizer</h1>", unsafe_allow_html=True)
-st.markdown("<p style='text-align: center;'>Add, edit, delete, review, favorite, and randomly pick Chicago eats & drinks! 🍸</p>", unsafe_allow_html=True)
-
-# Sidebar
+# Sidebar for actions
 st.sidebar.header("Actions")
-action = st.sidebar.radio(
-    "What do you want to do?",
-    ["View All Places",
-     "Favorites ❤️",
-     "Add a Place",
-     "Add a Review",
-     "Random Pick (with filters)"]
-)
+action = st.sidebar.radio("What do you want to do?", 
+                          ["View All Restaurants",
+                           "Add a Restaurant",
+                           "Add a Review",
+                           "Random"])
 
-st.sidebar.markdown("---")
-
-with st.sidebar.expander("⚙️ Data Management"):
-    if st.button("Download backup (JSON)"):
-        with open(DATA_FILE, "r") as f:
-            st.download_button(
-                label="Download restaurants.json",
-                data=f.read(),
-                file_name="restaurants.json",
-                mime="application/json"
-            )
-    
-    uploaded_backup = st.file_uploader("Restore from backup", type=["json"], key="backup_uploader")
-    if uploaded_backup and st.button("Restore Backup", type="primary"):
-        try:
-            data = json.load(uploaded_backup)
-            save_data(data)
-            st.session_state.restaurants = data
-            st.success("Backup restored successfully!")
-            st.rerun()
-        except Exception:
-            st.error("Invalid or corrupted backup file.")
-
-st.sidebar.caption("Built by Alan, made for us ❤️")
-
-def delete_restaurant(index):
-    r = restaurants[index]
-    if r.get("photos"):
-        for photo_path in r["photos"]:
-            if os.path.exists(photo_path):
-                os.remove(photo_path)
-    del restaurants[index]
-    save_data(restaurants)
-    st.success(f"{r['name']} deleted successfully.")
-
-def toggle_favorite(idx):
-    restaurants[idx]["favorite"] = not restaurants[idx].get("favorite", False)
-    save_data(restaurants)
-
-def google_maps_link(address, name=""):
-    query = f"{name}, {address}" if name else address
-    encoded = urllib.parse.quote(query)
-    return f"https://www.google.com/maps/search/?api=1&query={encoded}"
-
-# Headers
-if action == "View All Places":
-    st.header("All Places")
-    st.caption(f"{len(restaurants)} place(s) in your list")
-elif action == "Favorites ❤️":
-    st.header("❤️ Your Favorite Places")
-elif action == "Add a Place":
-    st.header("Add New Place")
-elif action == "Add a Review":
-    st.header("Leave a Review")
-elif action == "Random Pick (with filters)":
-    st.header("🎲 Random Place Picker")
-    st.markdown("Apply filters below, then let fate decide!")
-
-# View All Places & Favorites
-if action in ["View All Places", "Favorites ❤️"]:
-    display_places = [r for r in restaurants if r.get("favorite", False)] if action == "Favorites ❤️" else restaurants
-    
-    if not display_places:
-        if action == "Favorites ❤️":
-            st.info("No favorites yet! Go to 'View All Places' and tap ❤️ on your top spots.")
-        else:
-            st.info("No places added yet.")
-    else:
-        col_search, col_clear = st.columns([6, 1])
-        with col_search:
-            search_term = st.text_input("🔍 Search by name, cuisine, neighborhood, or address", key="search_input")
-        with col_clear:
-            if search_term and st.button("✖", key="clear_search_btn"):
-                st.session_state.search_input = ""
-                st.rerun()
-
-        filtered = display_places
-        if search_term:
-            search_lower = search_term.lower()
-            filtered = [
-                r for r in filtered
-                if (search_lower in r["name"].lower() or
-                    search_lower in r["cuisine"].lower() or
-                    search_lower in r["location"].lower() or
-                    search_lower in r.get("address", "").lower())
-            ]
-            st.write(f"**Found {len(filtered)} place(s)** matching '{search_term}'")
-
-        for idx, r in enumerate(sorted(filtered, key=lambda x: x["name"].lower())):
-            global_idx = restaurants.index(r)
-            type_icon = " 🍸" if r.get("type") == "cocktail_bar" else " 🍽️"
-            fav_icon = " ❤️" if r.get("favorite", False) else ""
-            review_text = ""
-            if r["reviews"]:
-                avg = sum(rev["rating"] for rev in r["reviews"]) / len(r["reviews"])
-                review_text = f" • {avg:.1f}⭐ ({len(r['reviews'])})"
-            
-            with st.expander(f"{r['name']}{type_icon}{fav_icon} • {r['cuisine']} • {r['price']} • {r['location']}{review_text}"):
-                col1, col2 = st.columns([3, 1])
-                with col1:
-                    st.write(f"**Address:** {r.get('address', 'Not provided')}")
-                    maps_url = google_maps_link(r.get("address", ""), r["name"])
-                    st.markdown(f"[📍 Open in Google Maps]({maps_url})")
-                with col2:
-                    st.button(
-                        "❤️ Unfavorite" if r.get("favorite", False) else "❤️ Favorite",
-                        key=f"fav_btn_{global_idx}",
-                        on_click=toggle_favorite,
-                        args=(global_idx,)
-                    )
-                    if st.button("Edit ✏️", key=f"edit_{global_idx}"):
-                        st.session_state.editing_index = global_idx
-                        st.rerun()
-                    
-                    delete_key = f"delete_confirm_{global_idx}"
-                    if delete_key in st.session_state:
-                        col_del, col_cancel = st.columns(2)
-                        with col_del:
-                            if st.button("🗑️ Confirm Delete", key=f"confirm_{global_idx}", type="primary"):
-                                delete_restaurant(global_idx)
-                                del st.session_state[delete_key]
-                                st.rerun()
-                        with col_cancel:
-                            if st.button("Cancel", key=f"cancel_{global_idx}"):
-                                del st.session_state[delete_key]
-                                st.rerun()
-                    else:
-                        if st.button("Delete 🗑️", key=f"delete_{global_idx}", type="secondary"):
-                            st.session_state[delete_key] = True
-                            st.rerun()
-
-                if r.get("photos"):
-                    st.write("**Photos:**")
-                    cols = st.columns(3)
-                    for p_idx, photo_path in enumerate(r["photos"]):
-                        if os.path.exists(photo_path):
-                            cols[p_idx % 3].image(photo_path, use_column_width=True)
-
-                if r["reviews"]:
-                    st.write("**Reviews:**")
-                    for rev in reversed(r["reviews"]):
-                        st.write(f"**{'★' * rev['rating']}{'☆' * (5 - rev['rating'])}** — {rev['reviewer']} ({rev['date']})")
-                        st.write(f"{rev['comment']}")
-                        st.markdown("---")
-                else:
-                    st.write("_No reviews yet — be the first!_")
-
-        if "editing_index" in st.session_state:
-            edit_idx = st.session_state.editing_index
-            r = restaurants[edit_idx]
-            st.markdown("---")
-            st.subheader(f"Editing: {r['name']}")
-
-            with st.form("edit_restaurant_form"):
-                new_name = st.text_input("Name*", value=r["name"])
-                current_cuisine = r["cuisine"]
-                cuisine_option = st.selectbox(
-                    "Cuisine/Style*",
-                    options=CUISINES,
-                    index=CUISINES.index(current_cuisine) if current_cuisine in CUISINES else CUISINES.index("Other")
-                )
-                new_cuisine = st.text_input("Custom cuisine*", value=current_cuisine if cuisine_option == "Other" else "") if cuisine_option == "Other" else cuisine_option
-
-                new_price = st.selectbox("Price Range*", ["$", "$$", "$$$", "$$$$"], index=["$", "$$", "$$$", "$$$$"].index(r["price"]))
-
-                current_location = r["location"]
-                location_option = st.selectbox(
-                    "Neighborhood*",
-                    options=NEIGHBORHOODS + ["Other"],
-                    index=NEIGHBORHOODS.index(current_location) if current_location in NEIGHBORHOODS else len(NEIGHBORHOODS)
-                )
-                new_location = st.text_input("Custom neighborhood*", value=current_location if location_option == "Other" else "") if location_option == "Other" else location_option
-
-                new_address = st.text_input("Address*", value=r.get("address", ""))
-                new_type = st.selectbox(
-                    "Type*",
-                    options=["restaurant", "cocktail_bar"],
-                    format_func=lambda x: "Restaurant 🍽️" if x == "restaurant" else "Cocktail Bar 🍸",
-                    index=0 if r.get("type", "restaurant") == "restaurant" else 1
-                )
-
-                st.write("**Current Photos (check to delete):**")
-                photos_to_delete = []
-                if r.get("photos"):
-                    cols = st.columns(3)
-                    for p_idx, photo_path in enumerate(r["photos"]):
-                        if os.path.exists(photo_path):
-                            with cols[p_idx % 3]:
-                                st.image(photo_path, use_column_width=True)
-                                if st.checkbox("Delete this photo", key=f"del_photo_{edit_idx}_{p_idx}"):
-                                    photos_to_delete.append(photo_path)
-
-                new_photos = st.file_uploader(
-                    "Add more photos (optional)",
-                    type=["jpg", "jpeg", "png"],
-                    accept_multiple_files=True,
-                    key=f"new_photos_edit_{edit_idx}"
-                )
-
-                col_save, col_cancel = st.columns(2)
-                with col_save:
-                    save_submitted = st.form_submit_button("Save Changes", type="primary")
-                with col_cancel:
-                    cancel = st.form_submit_button("Cancel")
-
-                if cancel:
-                    del st.session_state.editing_index
-                    st.rerun()
-
-                if save_submitted:
-                    new_cuisine = new_cuisine.strip() if cuisine_option == "Other" else cuisine_option
-                    new_location = new_location.strip() if location_option == "Other" else location_option
-
-                    if not all([new_name, new_cuisine, new_location, new_address]):
-                        st.error("All required fields must be filled.")
-                    elif new_name.lower() != r["name"].lower() and any(existing["name"].lower() == new_name.lower() for existing in restaurants if existing != r):
-                        st.warning("Another place with this name already exists!")
-                    else:
-                        for photo_path in photos_to_delete:
-                            if os.path.exists(photo_path):
-                                os.remove(photo_path)
-                            if photo_path in r["photos"]:
-                                r["photos"].remove(photo_path)
-
-                        if new_photos:
-                            safe_name = "".join(c for c in new_name if c.isalnum() or c in " -_").replace(" ", "_")
-                            for photo in new_photos:
-                                ext = photo.name.split(".")[-1].lower()
-                                filename = f"{safe_name}_{uuid.uuid4().hex[:8]}.{ext}"
-                                filepath = os.path.join(IMAGES_DIR, filename)
-                                with open(filepath, "wb") as f:
-                                    f.write(photo.getbuffer())
-                                r["photos"].append(filepath)
-
-                        r.update({
-                            "name": new_name.strip(),
-                            "cuisine": new_cuisine,
-                            "price": new_price,
-                            "location": new_location,
-                            "address": new_address.strip(),
-                            "type": new_type,
-                        })
-                        save_data(restaurants)
-                        st.success(f"{new_name} updated successfully!")
-                        del st.session_state.editing_index
-                        st.rerun()
-
-# Add a Place
-elif action == "Add a Place":
-    with st.form("add_place_form"):
-        name = st.text_input("Name*", placeholder="e.g., Lou Malnati's")
-        cuisine_option = st.selectbox("Cuisine/Style*", options=CUISINES)
-        cuisine = st.text_input("Enter custom cuisine*", placeholder="e.g., Vietnamese") if cuisine_option == "Other" else cuisine_option
-
-        price = st.selectbox("Price Range*", ["$", "$$", "$$$", "$$$$"])
-        location_option = st.selectbox("Neighborhood*", options=NEIGHBORHOODS + ["Other"])
-        location = st.text_input("Custom neighborhood*", placeholder="e.g., Logan Square") if location_option == "Other" else location_option
-
-        address = st.text_input("Address*", placeholder="e.g., 123 N Wacker Dr, Chicago, IL")
-        place_type = st.selectbox(
-            "Type*",
-            options=["restaurant", "cocktail_bar"],
-            format_func=lambda x: "Restaurant 🍽️" if x == "restaurant" else "Cocktail Bar 🍸",
-            index=0
-        )
-        uploaded_photos = st.file_uploader(
-            "Upload Photos (optional)",
-            type=["jpg", "jpeg", "png"],
-            accept_multiple_files=True
-        )
-
-        submitted = st.form_submit_button("Add Place", type="primary")
-        if submitted:
-            cuisine = cuisine.strip() if cuisine_option == "Other" else cuisine_option
-            location = location.strip() if location_option == "Other" else location_option
-
-            if not all([name, cuisine, location, address]):
-                st.error("Please fill in all required fields (*)")
-            elif any(r["name"].lower() == name.lower() for r in restaurants):
-                st.warning("This place already exists!")
+if action == "Add a Restaurant":
+    st.header("Add New Restaurant")
+    with st.form("add_restaurant"):
+        name = st.text_input("Restaurant Name")
+        cuisine = st.text_input("Cuisine")
+        price = st.selectbox("Price Range", ["$", "$$", "$$$", "$$$$"])
+        location = st.text_input("Location")
+        submitted = st.form_submit_button("Add Restaurant")
+        if submitted and name:
+            if any(r["name"].lower() == name.lower() for r in restaurants):
+                st.warning("This restaurant already exists!")
             else:
-                photo_paths = []
-                if uploaded_photos:
-                    safe_name = "".join(c for c in name if c.isalnum() or c in " -_").replace(" ", "_")
-                    for photo in uploaded_photos:
-                        ext = photo.name.split(".")[-1].lower()
-                        filename = f"{safe_name}_{uuid.uuid4().hex[:8]}.{ext}"
-                        filepath = os.path.join(IMAGES_DIR, filename)
-                        with open(filepath, "wb") as f:
-                            f.write(photo.getbuffer())
-                        photo_paths.append(filepath)
-
                 restaurants.append({
-                    "name": name.strip(),
+                    "name": name,
                     "cuisine": cuisine,
                     "price": price,
                     "location": location,
-                    "address": address.strip(),
-                    "type": place_type,
-                    "favorite": False,
-                    "photos": photo_paths,
                     "reviews": []
                 })
                 save_data(restaurants)
-                st.success(f"{name} added successfully!")
+                st.success(f"{name} added!")
                 st.rerun()
 
-# Add a Review
 elif action == "Add a Review":
+    st.header("Leave a Review")
     if not restaurants:
-        st.info("No places yet — add one first!")
+        st.info("No restaurants yet — add one first!")
     else:
         names = [r["name"] for r in restaurants]
-        selected = st.selectbox("Choose place to review", names)
-        with st.form("add_review_form", clear_on_submit=True):
-            st.write("**Your Rating**")
-            rating = st.radio(
-                "Select your rating",
-                options=[1, 2, 3, 4, 5],
-                format_func=lambda x: "★" * x + "☆" * (5 - x),
-                horizontal=True,
-                label_visibility="collapsed"
-            )
-            comment = st.text_area("Your thoughts*", placeholder="What did you like? Any standout dishes or drinks?")
-            reviewer = st.text_input("Your name (optional)", placeholder="e.g., Alex")
-            submitted = st.form_submit_button("Submit Review", type="primary")
+        selected = st.selectbox("Choose restaurant", names)
+        with st.form("add_review"):
+            rating = st.slider("Rating", 1, 5, 3)
+            comment = st.text_area("Your thoughts")
+            submitted = st.form_submit_button("Submit Review")
             if submitted:
-                if not comment.strip():
-                    st.error("Please write a comment!")
-                else:
-                    review = {
-                        "rating": rating,
-                        "comment": comment.strip(),
-                        "reviewer": reviewer.strip() or "Anonymous",
-                        "date": datetime.now().strftime("%B %d, %Y")
-                    }
-                    for r in restaurants:
-                        if r["name"] == selected:
-                            r["reviews"].append(review)
-                            break
-                    save_data(restaurants)
-                    st.success("Thank you! Review added 🎉")
-                    st.rerun()
+                review = {
+                    "rating": rating,
+                    "comment": comment,
+                    "reviewer": reviewer or "Anonymous",
+                    "date": datetime.now().strftime("%Y-%m-%d")
+                }
+                for r in restaurants:
+                    if r["name"] == selected:
+                        r["reviews"].append(review)
+                        break
+                save_data(restaurants)
+                st.success("Review added!")
+                st.rerun()
 
-# Random Pick - Envelope appears ONLY after clicking the button
-else:
+elif action == "View All Restaurants":
+    st.header("All Restaurants")
     if not restaurants:
-        st.info("No places yet — add some first!")
+        st.info("No restaurants added yet.")
     else:
-        col1, col2 = st.columns(2)
-        with col1:
-            all_cuisines = sorted({r["cuisine"] for r in restaurants})
-            cuisine_filter = st.multiselect("Cuisine", options=all_cuisines, default=[])
-            all_prices = sorted({r["price"] for r in restaurants}, key=lambda x: len(x))
-            price_filter = st.multiselect("Price Range", options=all_prices, default=[])
-            type_filter = st.selectbox(
-                "Type",
-                options=["all", "restaurant", "cocktail_bar"],
-                format_func=lambda x: {
-                    "all": "All Places",
-                    "restaurant": "Only Restaurants 🍽️",
-                    "cocktail_bar": "Only Cocktail Bars 🍸"
-                }[x],
-                index=0
-            )
-            only_favorites = st.checkbox("Only show favorites ❤️")
-        with col2:
-            all_locations = sorted({r["location"] for r in restaurants})
-            location_filter = st.multiselect("Neighborhood", options=all_locations, default=[])
-
-        filtered = restaurants.copy()
-        if only_favorites:
-            filtered = [r for r in filtered if r.get("favorite", False)]
-        if type_filter != "all":
-            filtered = [r for r in filtered if r.get("type", "restaurant") == type_filter]
-        if cuisine_filter:
-            filtered = [r for r in filtered if r["cuisine"] in cuisine_filter]
-        if price_filter:
-            filtered = [r for r in filtered if r["price"] in price_filter]
-        if location_filter:
-            filtered = [r for r in filtered if r["location"] in location_filter]
-
-        st.markdown(f"**{len(filtered)} place(s)** match your filters.")
-
-        if len(filtered) == 0:
-            st.warning("No places match your current filters. Try broadening them!")
-        else:
-            # Show button only if no current envelope is displayed
-            if st.session_state.get("show_envelope", False) == False:
-                if st.button("🎲 Pick Random Place!", type="primary", use_container_width=True):
-                    choice = random.choice(filtered)
-                    st.session_state.last_random_choice = choice
-                    st.session_state.show_envelope = True
-                    st.session_state.reveal_envelope = True
-                    st.balloons()
-                    st.rerun()
-
-            # Show envelope only when triggered
-            if st.session_state.get("show_envelope", False):
-                choice = st.session_state.last_random_choice
-
-                if choice not in filtered:
-                    st.info("🍽️ Your previous pick no longer matches the current filters.")
-                    if st.button("Clear and pick a new one"):
-                        for key in ["last_random_choice", "show_envelope", "reveal_envelope"]:
-                            if key in st.session_state:
-                                del st.session_state[key]
-                        st.rerun()
+        for r in restaurants:
+            with st.expander(f"{r['name']} • {r['cuisine']} • {r['price']} • {r['location']}"):
+                if r["reviews"]:
+                    st.write("**Reviews:**")
+                    for rev in r["reviews"]:
+                        st.write(f"**{rev['rating']}⭐** - {rev['reviewer']} ({rev['date']})")
+                        st.write(f"{rev['comment']}")
                 else:
-                    reveal_class = "revealed" if st.session_state.get("reveal_envelope", False) else ""
+                    st.write("No reviews yet.")
 
-                    st.markdown("<div style='text-align: center; margin-top: 30px;'>", unsafe_allow_html=True)
-                    st.markdown("### 🎉 **Opening your surprise...**")
-                    st.markdown("</div>", unsafe_allow_html=True)
+else:  # Random Pick with filters
+    st.header("🎲 Random Restaurant Picker")
+    
+    col1, col2 = st.columns(2)
+    with col1:
+        cuisine_filter = st.multiselect("Cuisine", 
+                                        options=sorted(set(r["cuisine"] for r in restaurants if r["cuisine"])),
+                                        default=[])
+        price_filter = st.multiselect("Price", 
+                                      options=sorted(set(r["price"] for r in restaurants)),
+                                      default=[])
+    with col2:
+        location_filter = st.multiselect("Location", 
+                                         options=sorted(set(r["location"] for r in restaurants if r["location"])),
+                                         default=[])
 
-                    st.markdown(f"<div class='envelope-reveal {reveal_class}'>", unsafe_allow_html=True)
-                    st.markdown("<div class='envelope-flap'></div>", unsafe_allow_html=True)
-                    st.markdown("<div class='envelope-bottom'></div>", unsafe_allow_html=True)
+    # Apply filters
+    filtered = restaurants
+    if cuisine_filter:
+        filtered = [r for r in filtered if r["cuisine"] in cuisine_filter]
+    if price_filter:
+        filtered = [r for r in filtered if r["price"] in price_filter]
+    if location_filter:
+        filtered = [r for r in filtered if r["location"] in location_filter]
 
-                    st.markdown("<div class='envelope-content'>", unsafe_allow_html=True)
+    st.write(f"**{len(filtered)} restaurants** match your filters.")
 
-                    type_tag = " 🍸 Cocktail Bar" if choice.get("type") == "cocktail_bar" else " 🍽️ Restaurant"
-                    fav_tag = " ❤️" if choice.get("favorite", False) else ""
-                    st.markdown(f"# {choice['name']}{type_tag}{fav_tag}")
+    if filtered:
+        if st.button("🎲 Pick Random Restaurant!", type="primary"):
+            choice = random.choice(filtered)
+            st.balloons()
+            st.success("Your random pick is...")
+            st.markdown(f"### 🍴 {choice['name']}")
+            st.write(f"**Cuisine:** {choice['cuisine']}  |  **Price:** {choice['price']}  |  **Location:** {choice['location']}")
+            if choice["reviews"]:
+                st.write("**Recent reviews:**")
+                for rev in choice["reviews"][-3:]:  # last 3
+                    st.write(f"**{rev['rating']}⭐** - {rev['reviewer']}: {rev['comment']}")
+    else:
+        st.warning("No restaurants match your filters — try loosening them!")
 
-                    st.write(f"**Cuisine:** {choice['cuisine']} • **Price:** {choice['price']} • **Location:** {choice['location']}")
-                    st.write(f"**Address:** {choice.get('address', 'Not provided')}")
-
-                    maps_url = google_maps_link(choice.get("address", ""), choice["name"])
-                    st.markdown(f"[📍 Open in Google Maps]({maps_url})")
-
-                    global_idx = restaurants.index(choice)
-                    st.button(
-                        "❤️ Remove from Favorites" if choice.get("favorite", False) else "❤️ Add to Favorites",
-                        key=f"rand_fav_{global_idx}",
-                        on_click=toggle_favorite,
-                        args=(global_idx,)
-                    )
-
-                    if choice.get("photos"):
-                        st.markdown("### Photos")
-                        cols = st.columns(3)
-                        for idx, photo_path in enumerate(choice["photos"]):
-                            if os.path.exists(photo_path):
-                                cols[idx % 3].image(photo_path, use_column_width=True)
-
-                    if choice["reviews"]:
-                        st.markdown("### Recent Reviews")
-                        for rev in choice["reviews"][-3:]:
-                            st.write(f"**{'★' * rev['rating']}{'☆' * (5 - rev['rating'])}** — {rev['reviewer']} ({rev['date']})")
-                            st.write(f"_{rev['comment']}_")
-                    else:
-                        st.info("No reviews yet — you'll be the pioneer!")
-
-                    st.markdown("</div>", unsafe_allow_html=True)  # close content
-                    st.markdown("</div>", unsafe_allow_html=True)  # close envelope
-
-                    col1, col2 = st.columns(2)
-                    with col1:
-                        if st.button("🎲 Pick Again!", type="secondary", use_container_width=True):
-                            choice = random.choice(filtered)
-                            st.session_state.last_random_choice = choice
-                            st.session_state.reveal_envelope = True
-                            st.rerun()
-                    with col2:
-                        if st.button("✨ Done — Hide this pick", type="secondary", use_container_width=True):
-                            st.session_state.show_envelope = False
-                            st.rerun()
+# Footer
+st.sidebar.markdown("---")
+st.sidebar.caption("Built by Alan made for us ❤️")
