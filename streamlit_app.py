@@ -7,9 +7,6 @@ import uuid
 from datetime import datetime
 import zipfile
 from io import BytesIO
-import requests
-import time
-from streamlit_lottie import st_lottie_spinner
 
 DATA_FILE = "restaurants.json"
 IMAGES_DIR = "images"
@@ -133,15 +130,6 @@ def google_maps_link(address, name=""):
     query = f"{name}, {address}" if name else address
     return f"https://www.google.com/maps/search/?api=1&query={urllib.parse.quote(query)}"
 
-def load_lottie_url(url: str):
-    try:
-        r = requests.get(url)
-        if r.status_code == 200:
-            return r.json()
-    except:
-        return None
-    return None
-
 # ────────────────────────────── View All Places ──────────────────────────────
 if action == "View All Places":
     st.header("All Places")
@@ -175,8 +163,8 @@ if action == "View All Places":
             icon = " 🍸" if r.get("type") == "cocktail_bar" else " 🍽️"
             fav = " ❤️" if r.get("favorite") else ""
             visited = " ✅" if r.get("visited") else ""
-            notes_count = f" • {len(r['reviews'])} note{'s' if len(r['reviews']) != 1 else ''}" if r["reviews"] else ""
-            with st.expander(f"{r['name']}{icon}{fav}{visited} • {r['cuisine']} • {r['price']} • {r['location']}{notes_count}",
+            stars = f" • {len(r['reviews'])} note{'s' if len(r['reviews']) != 1 else ''}" if r["reviews"] else ""
+            with st.expander(f"{r['name']}{icon}{fav}{visited} • {r['cuisine']} • {r['price']} • {r['location']}{stars}",
                              expanded=(f"edit_mode_{global_idx}" in st.session_state)):
                 if f"edit_mode_{global_idx}" not in st.session_state:
                     col1, col2 = st.columns([3, 1])
@@ -377,19 +365,8 @@ else:
         if not filtered:
             st.warning("No matches – try broader filters!")
         else:
-            # Load the dice rolling animation (a nice 3D rolling pair of dice)
-            lottie_dice = load_lottie_url("https://lottiefiles.com/animations/dice-roll-3d-0k2v2z7q")
-
             if st.button("🎲 Pick Random Place!", type="primary", use_container_width=True):
-                if lottie_dice:
-                    with st_lottie_spinner(lottie_dice, height=300, width=300, quality="high", key="dice_roll"):
-                        time.sleep(3)  # Let the animation play fully (~3 seconds roll)
-                else:
-                    st.warning("Animation failed to load – picking instantly...")
-                    time.sleep(1)
-
-                picked = random.choice(filtered)
-                st.session_state.last_pick = picked
+                st.session_state.last_pick = random.choice(filtered)
                 st.balloons()
                 st.rerun()
 
@@ -429,11 +406,7 @@ else:
                         st.info("No notes yet!")
 
                     if st.button("🎲 Pick Again!", type="secondary", use_container_width=True):
-                        if lottie_dice:
-                            with st_lottie_spinner(lottie_dice, height=300, width=300, quality="high", key="dice_roll_again"):
-                                time.sleep(3)
-                        picked = random.choice(filtered)
-                        st.session_state.last_pick = picked
+                        st.session_state.last_pick = random.choice(filtered)
                         st.rerun()
             elif "last_pick" in st.session_state:
                 st.info("Previous pick no longer matches filters – pick again!")
