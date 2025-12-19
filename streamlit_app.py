@@ -124,6 +124,10 @@ def toggle_favorite(idx):
     restaurants[idx]["favorite"] = not restaurants[idx].get("favorite", False)
     save_data(restaurants)
 
+def toggle_visited(idx):
+    restaurants[idx]["visited"] = not restaurants[idx].get("visited", False)
+    save_data(restaurants)
+
 def google_maps_link(address, name=""):
     query = f"{name}, {address}" if name else address
     return f"https://www.google.com/maps/search/?api=1&query={urllib.parse.quote(query)}"
@@ -167,7 +171,6 @@ if action == "View All Places":
             with st.expander(f"{r['name']}{icon}{fav}{visited} • {r['cuisine']} • {r['price']} • {r['location']}{stars}",
                              expanded=(f"edit_mode_{global_idx}" in st.session_state)):
                 if f"edit_mode_{global_idx}" not in st.session_state:
-                    # Normal view
                     col1, col2 = st.columns([3, 1])
                     with col1:
                         st.write(f"**Address:** {r.get('address', 'Not provided')}")
@@ -209,7 +212,6 @@ if action == "View All Places":
                         st.write("_No reviews yet — be the first!_")
 
                 else:
-                    # Edit mode
                     st.subheader(f"Editing: {r['name']}")
                     with st.form(key=f"edit_form_{global_idx}"):
                         new_name = st.text_input("Name*", value=r["name"])
@@ -222,7 +224,6 @@ if action == "View All Places":
                                                 index=0 if r.get("type")=="restaurant" else 1)
                         new_visited = st.checkbox("✅ I've already visited", value=r.get("visited", False))
 
-                        # ───── Edit / Delete Reviews ─────
                         st.write("**Reviews / Notes**")
                         reviews_to_delete = []
                         for i, rev in enumerate(r["reviews"]):
@@ -237,12 +238,10 @@ if action == "View All Places":
                             rev["rating"] = new_rating
                             rev["comment"] = new_comment
 
-                        # Add new review
                         st.write("Add new note (optional)")
                         new_rev_rating = st.slider("Rating", 1, 5, 5)
                         new_rev_comment = st.text_area("Comment", height=80, key=f"new_rev_{global_idx}")
 
-                        # Photos
                         st.write("**Photos (check to delete)**")
                         photos_to_delete = []
                         if r.get("photos"):
@@ -272,16 +271,13 @@ if action == "View All Places":
                             elif new_name.lower().strip() != r["name"].lower() and any(e["name"].lower() == new_name.lower().strip() for e in restaurants if e != r):
                                 st.warning("Name already exists!")
                             else:
-                                # Delete selected photos
                                 for p in photos_to_delete:
                                     if os.path.exists(p): os.remove(p)
                                     if p in r["photos"]: r["photos"].remove(p)
 
-                                # Delete selected reviews
                                 for i in sorted(reviews_to_delete, reverse=True):
                                     del r["reviews"][i]
 
-                                # Add new review if filled
                                 if new_rev_comment.strip():
                                     r["reviews"].append({
                                         "rating": new_rev_rating,
@@ -290,7 +286,6 @@ if action == "View All Places":
                                         "date": datetime.now().strftime("%B %d, %Y")
                                     })
 
-                                # Add new photos
                                 if new_photos:
                                     safe = "".join(c for c in new_name if c.isalnum() or c in " -_").replace(" ", "_")
                                     for photo in new_photos:
@@ -407,9 +402,17 @@ else:
                     st.write(f"{c['cuisine']} • {c['price']} • {c['location']}")
                     st.write(f"**Address:** {c.get('address','')}")
                     st.markdown(f"[📍 Google Maps]({google_maps_link(c.get('address',''), c['name'])})")
+                    
                     idx = restaurants.index(c)
-                    st.button("❤️ Unfavorite" if c.get("favorite") else "❤️ Favorite",
-                              key=f"rand_fav_{idx}", on_click=toggle_favorite, args=(idx,))
+                    
+                    col_fav, col_vis = st.columns(2)
+                    with col_fav:
+                        st.button("❤️ Unfavorite" if c.get("favorite") else "❤️ Favorite",
+                                  key=f"rand_fav_{idx}", on_click=toggle_favorite, args=(idx,))
+                    with col_vis:
+                        st.button("✅ Mark as Unvisited" if c.get("visited") else "✅ Mark as Visited",
+                                  key=f"rand_vis_{idx}", on_click=toggle_visited, args=(idx,))
+
                     if c.get("photos"):
                         st.markdown("### Photos")
                         cols = st.columns(3)
@@ -422,7 +425,7 @@ else:
                             st.write(f"_{rev['comment']}_")
                     else:
                         st.info("No reviews yet!")
-                    if st.button("🎲 Pick Again!"):
+                    if st.button("🎲 Pick Again!", type="secondary", use_container_width=True):
                         st.session_state.last_pick = random.choice(filtered)
                         st.rerun()
             elif "last_pick" in st.session_state:
