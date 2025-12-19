@@ -170,7 +170,7 @@ with st.sidebar.expander("⚙️ Data Management"):
         except Exception as e:
             st.error(f"Error restoring backup: {str(e)}")
 
-st.sidebar.caption("Built by Alan, made for us ❤️ • Now with map view!")
+st.sidebar.caption("Built by Alan, made for us ❤️ • Now with interactive map!")
 
 # ====================== MAP VIEW TAB ======================
 if action == "Map View 🗺️":
@@ -198,18 +198,26 @@ if action == "Map View 🗺️":
                 type_icon = " 🍸" if r.get("type") == "cocktail_bar" else " 🍽️"
                 fav = " ❤️" if r.get("favorite", False) else ""
                 visited = " ✅" if r.get("visited", False) else ""
+
+                # Google Maps URL for this specific place
+                gmaps_query = urllib.parse.quote(r['name'] + ", " + r.get('address', 'Chicago, IL'))
+                gmaps_url = f"https://www.google.com/maps/search/?api=1&query={gmaps_query}"
+
                 tooltip = f"""
                 <b>{r['name']}</b>{type_icon}{fav}{visited}<br>
                 {r['cuisine']} • {r['price']}<br>
                 {r['location']}<br>
-                <i>{r.get('address', '')}</i>
+                <i>{r.get('address', '')}</i><br>
+                <a href="{gmaps_url}" target="_blank" style="color:blue;">📍 Open in Google Maps</a>
                 """
+
                 map_data.append({
                     "name": r["name"],
                     "lat": float(lat),
                     "lon": float(lng),
                     "tooltip": tooltip,
-                    "color": [255, 80, 80] if r.get("favorite", False) else [80, 140, 255]
+                    "color": [255, 80, 80] if r.get("favorite", False) else [80, 140, 255],
+                    "gmaps_url": gmaps_url
                 })
             else:
                 missing_coords += 1
@@ -232,14 +240,23 @@ if action == "Map View 🗺️":
                 data=df,
                 get_position="[lon, lat]",
                 get_color="color",
-                get_radius=10,
+                get_radius=300,           # Large in meters → big bubbles when zoomed out
+                radius_min_pixels=10,     # Never disappears when zoomed in
+                radius_max_pixels=80,     # Caps size → gets smaller as you zoom in
                 pickable=True,
                 auto_highlight=True,
             )
 
             tooltip = {
                 "html": "{tooltip}",
-                "style": {"backgroundColor": "white", "color": "black", "fontFamily": "Helvetica, Arial", "padding": "10px"}
+                "style": {
+                    "backgroundColor": "white",
+                    "color": "black",
+                    "fontFamily": "Helvetica, Arial",
+                    "padding": "12px",
+                    "borderRadius": "8px",
+                    "boxShadow": "0 4px 8px rgba(0,0,0,0.1)"
+                }
             }
 
             deck = pdk.Deck(
@@ -248,8 +265,18 @@ if action == "Map View 🗺️":
                 tooltip=tooltip
             )
 
-            st.pydeck_chart(deck, use_container_width=True)
-            st.caption("❤️ Red pins = Favorites • Blue pins = Others • Hover/click for details")
+            # Render map and capture selection
+            selection = st.pydeck_chart(deck, use_container_width=True, on_select="rerun")
+
+            st.caption("❤️ Red pins = Favorites • Blue pins = Others • Hover for info • **Click a pin to open in Google Maps**")
+
+            # When user clicks a pin → open Google Maps in new tab
+            if selection and selection.get("objects"):
+                clicked = selection["objects"][0]["object"]
+                gmaps_url = clicked["gmaps_url"]
+                js = f"window.open('{gmaps_url}', '_blank');"
+                st.components.v1.html(f"<script>{js}</script>", height=0)
+
         else:
             st.info("No places with valid coordinates yet.")
 
@@ -275,7 +302,7 @@ else:
         encoded = urllib.parse.quote(query)
         return f"https://www.google.com/maps/search/?api=1&query={encoded}"
 
-    # Header
+    # Header based on action
     if action == "View All Places":
         st.header("All Places")
         st.caption(f"{len(restaurants)} place(s) in your list")
@@ -382,11 +409,10 @@ else:
 
                     col_lat, col_lng = st.columns(2)
                     with col_lat:
-                        manual_lat = st.text_input("Latitude (optional)", value=r.get("lat", "") or "")
+                        manual_lat = st.text_input("Latitude (optional)", value=str(r.get("lat")) if r.get("lat") else "")
                     with col_lng:
-                        manual_lng = st.text_input("Longitude (optional)", value=r.get("lng", "") or "")
+                        manual_lng = st.text_input("Longitude (optional)", value=str(r.get("lng")) if r.get("lng") else "")
 
-                    # Photos handling (delete + add)
                     photos_to_delete = []
                     if r.get("photos"):
                         st.write("**Current Photos (check to delete):**")
@@ -417,13 +443,11 @@ else:
                         if not all([new_name, new_cuisine, new_location, new_address]):
                             st.error("Required fields missing.")
                         else:
-                            # Delete photos
                             for p in photos_to_delete:
                                 if os.path.exists(p):
                                     os.remove(p)
                                 if p in r["photos"]:
                                     r["photos"].remove(p)
-                            # Add new photos
                             if new_photos:
                                 safe_name = "".join(c for c in new_name if c.isalnum() or c in " -_").replace(" ", "_")
                                 for photo in new_photos:
@@ -433,7 +457,6 @@ else:
                                     with open(filepath, "wb") as f:
                                         f.write(photo.getbuffer())
                                     r["photos"].append(filepath)
-                            # Update
                             r.update({
                                 "name": new_name.strip(),
                                 "cuisine": new_cuisine,
