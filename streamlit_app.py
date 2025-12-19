@@ -286,19 +286,91 @@ if action == "View All Places":
                 else:
                     st.write("_No reviews yet — be the first!_")
 
-        # Edit form remains the same
+        # Edit form
         if "editing_index" in st.session_state:
             edit_idx = st.session_state.editing_index
             r = restaurants[edit_idx]
             st.markdown("---")
             st.subheader(f"Editing: {r['name']}")
             with st.form("edit_restaurant_form", clear_on_submit=False):
-                # ... (entire edit form unchanged from previous version)
-                # Keeping it identical for brevity — you can copy from earlier code if needed
-                pass  # Replace with your full edit form if copying
+                new_name = st.text_input("Name*", value=r["name"])
+                current_cuisine = r["cuisine"]
+                cuisine_option = st.selectbox("Cuisine/Style*", options=CUISINES,
+                    index=CUISINES.index(current_cuisine) if current_cuisine in CUISINES else CUISINES.index("Other"))
+                new_cuisine = st.text_input("Custom cuisine*", value=current_cuisine if cuisine_option == "Other" else "") if cuisine_option == "Other" else cuisine_option
+                new_price = st.selectbox("Price Range*", ["$", "$$", "$$$", "$$$$"], index=["$", "$$", "$$$", "$$$$"].index(r["price"]))
+                current_location = r["location"]
+                location_option = st.selectbox("Neighborhood*", options=NEIGHBORHOODS + ["Other"],
+                    index=NEIGHBORHOODS.index(current_location) if current_location in NEIGHBORHOODS else len(NEIGHBORHOODS))
+                new_location = st.text_input("Custom neighborhood*", value=current_location if location_option == "Other" else "") if location_option == "Other" else location_option
+                new_address = st.text_input("Address*", value=r.get("address", ""))
+                new_type = st.selectbox("Type*", options=["restaurant", "cocktail_bar"],
+                    format_func=lambda x: "Restaurant 🍽️" if x == "restaurant" else "Cocktail Bar 🍸",
+                    index=0 if r.get("type", "restaurant") == "restaurant" else 1)
+                new_visited = st.checkbox("✅ I've already visited this place", value=r.get("visited", False))
+
+                st.write("**Current Photos (check to delete):**")
+                photos_to_delete = []
+                if r.get("photos"):
+                    cols = st.columns(3)
+                    for p_idx, photo_path in enumerate(r["photos"]):
+                        if os.path.exists(photo_path):
+                            with cols[p_idx % 3]:
+                                st.image(photo_path, use_column_width=True)
+                                if st.checkbox("Delete this photo", key=f"del_photo_{edit_idx}_{p_idx}"):
+                                    photos_to_delete.append(photo_path)
+
+                new_photos = st.file_uploader("Add more photos (optional)", type=["jpg", "jpeg", "png"], accept_multiple_files=True, key=f"new_photos_edit_{edit_idx}")
+
+                col_save, col_cancel = st.columns(2)
+                with col_save:
+                    save_submitted = st.form_submit_button("Save Changes", type="primary")
+                with col_cancel:
+                    cancel = st.form_submit_button("Cancel")
+
+                if cancel:
+                    del st.session_state.editing_index
+                    st.rerun()
+
+                if save_submitted:
+                    new_cuisine = new_cuisine.strip() if cuisine_option == "Other" else cuisine_option
+                    new_location = new_location.strip() if location_option == "Other" else location_option
+                    if not all([new_name, new_cuisine, new_location, new_address]):
+                        st.error("All required fields must be filled.")
+                    elif new_name.lower() != r["name"].lower() and any(existing["name"].lower() == new_name.lower() for existing in restaurants if existing != r):
+                        st.warning("Another place with this name already exists!")
+                    else:
+                        for photo_path in photos_to_delete:
+                            if os.path.exists(photo_path):
+                                os.remove(photo_path)
+                            if photo_path in r["photos"]:
+                                r["photos"].remove(photo_path)
+                        if new_photos:
+                            safe_name = "".join(c for c in new_name if c.isalnum() or c in " -_").replace(" ", "_")
+                            for photo in new_photos:
+                                ext = photo.name.split(".")[-1].lower()
+                                filename = f"{safe_name}_{uuid.uuid4().hex[:8]}.{ext}"
+                                filepath = os.path.join(IMAGES_DIR, filename)
+                                with open(filepath, "wb") as f:
+                                    f.write(photo.getbuffer())
+                                r["photos"].append(filepath)
+                        r.update({
+                            "name": new_name.strip(),
+                            "cuisine": new_cuisine,
+                            "price": new_price,
+                            "location": new_location,
+                            "address": new_address.strip(),
+                            "type": new_type,
+                            "visited": new_visited,
+                        })
+                        save_data(restaurants)
+                        st.success(f"{new_name} updated successfully!")
+                        st.balloons()
+                        del st.session_state.editing_index
+                        st.rerun()
 
 # ========================
-# Add a Place (with optional first review)
+# Add a Place
 # ========================
 elif action == "Add a Place":
     st.header("Add a New Place")
@@ -315,18 +387,14 @@ elif action == "Add a Place":
                                   format_func=lambda x: "Restaurant 🍽️" if x == "restaurant" else "Cocktail Bar 🍸")
         visited = st.checkbox("✅ I've already visited this place")
 
+        # Optional quick notes — right before photos
+        quick_notes = st.text_area(
+            "Quick notes / first impressions (optional)",
+            placeholder="e.g., Amazing deep dish, must try the Malnati Chicago Classic! Great vibe.",
+            height=100
+        )
+
         uploaded_photos = st.file_uploader("Upload Photos (optional)", type=["jpg", "jpeg", "png"], accept_multiple_files=True)
-
-        st.markdown("### ⭐ Optional: Leave your first review now")
-        add_review = st.checkbox("Add a review while creating this place")
-        initial_rating = None
-        initial_comment = ""
-        initial_reviewer = ""
-
-        if add_review:
-            initial_rating = st.slider("Your Rating", 1, 5, 4, format="%d ⭐")
-            initial_comment = st.text_area("Your thoughts", placeholder="What stood out? Any must-try items?")
-            initial_reviewer = st.text_input("Your name (optional)", placeholder="e.g., You")
 
         submitted = st.form_submit_button("Add Place", type="primary")
 
@@ -364,19 +432,18 @@ elif action == "Add a Place":
                     "added_date": datetime.now().isoformat()
                 }
 
-                # Add initial review if provided
-                if add_review and initial_rating is not None:
+                if quick_notes.strip():
                     review = {
-                        "rating": initial_rating,
-                        "comment": initial_comment.strip(),
-                        "reviewer": initial_reviewer.strip() or "Anonymous",
+                        "rating": 5,
+                        "comment": quick_notes.strip(),
+                        "reviewer": "You",
                         "date": datetime.now().strftime("%B %d, %Y")
                     }
                     new_place["reviews"].append(review)
 
                 restaurants.append(new_place)
                 save_data(restaurants)
-                st.success(f"{name.strip()} added successfully!" + (" Review saved!" if add_review else ""))
+                st.success(f"{name.strip()} added successfully!" + (" Notes saved!" if quick_notes.strip() else ""))
                 st.balloons()
                 st.rerun()
 
