@@ -66,70 +66,76 @@ if "restaurants" not in st.session_state:
 
 restaurants = st.session_state.restaurants
 
-# Custom CSS for the envelope reveal animation
+# Smaller, elegant envelope animation
 st.markdown("""
 <style>
-/* Envelope container */
 .envelope-reveal {
     perspective: 1200px;
     width: 100%;
-    max-width: 700px;
-    margin: 40px auto;
+    max-width: 520px;
+    margin: 30px auto;
     position: relative;
-    height: 420px;
+    height: 360px;
 }
 
-/* Top flap of the envelope */
 .envelope-flap {
     position: absolute;
     top: 0;
     left: 0;
     width: 100%;
-    height: 220px;
+    height: 180px;
     background: linear-gradient(to bottom, #ff4444, #cc0000);
     clip-path: polygon(0% 0%, 100% 0%, 50% 100%);
     transform-origin: top;
     transition: transform 1.4s ease-in-out;
     z-index: 10;
-    box-shadow: 0 4px 20px rgba(0,0,0,0.3);
+    box-shadow: 0 4px 15px rgba(0,0,0,0.3);
 }
 
-/* Flap opens when revealed */
 .revealed .envelope-flap {
     transform: rotateX(-180deg);
 }
 
-/* Bottom part of the envelope */
 .envelope-bottom {
     position: absolute;
     bottom: 0;
     left: 0;
     width: 100%;
-    height: 300px;
-    background: linear-gradient(to top, #ff4444, #ff6666);
+    height: 260px;
+    background: linear-gradient(to top, #ff4444, #ff7777);
     clip-path: polygon(0% 35%, 50% 100%, 100% 35%, 100% 100%, 0% 100%);
-    box-shadow: 0 10px 30px rgba(0,0,0,0.4);
+    box-shadow: 0 8px 25px rgba(0,0,0,0.3);
 }
 
-/* The "letter" card inside */
 .envelope-content {
     position: absolute;
-    top: 80px;
-    left: 0;
-    width: 100%;
+    top: 70px;
+    left: 20px;
+    right: 20px;
     background: white;
-    border-radius: 12px;
-    padding: 30px;
-    box-shadow: 0 15px 40px rgba(0,0,0,0.35);
+    border-radius: 10px;
+    padding: 24px;
+    box-shadow: 0 12px 35px rgba(0,0,0,0.3);
     opacity: 0;
-    transform: translateY(60px);
+    transform: translateY(50px);
     transition: opacity 1s ease 0.7s, transform 1s ease 0.7s;
 }
 
-/* Content appears after flap opens */
 .revealed .envelope-content {
     opacity: 1;
     transform: translateY(0);
+}
+
+@media (max-width: 640px) {
+    .envelope-reveal {
+        max-width: 90%;
+        height: 380px;
+    }
+    .envelope-content {
+        left: 15px;
+        right: 15px;
+        padding: 20px;
+    }
 }
 </style>
 """, unsafe_allow_html=True)
@@ -296,7 +302,6 @@ if action in ["View All Places", "Favorites ❤️"]:
                 else:
                     st.write("_No reviews yet — be the first!_")
 
-        # Edit form
         if "editing_index" in st.session_state:
             edit_idx = st.session_state.editing_index
             r = restaurants[edit_idx]
@@ -494,7 +499,7 @@ elif action == "Add a Review":
                     st.success("Thank you! Review added 🎉")
                     st.rerun()
 
-# Random Pick with Envelope Animation
+# Random Pick - Envelope appears ONLY after clicking the button
 else:
     if not restaurants:
         st.info("No places yet — add some first!")
@@ -532,25 +537,38 @@ else:
         if location_filter:
             filtered = [r for r in filtered if r["location"] in location_filter]
 
-        st.write(f"**{len(filtered)} place(s)** match your filters.")
+        st.markdown(f"**{len(filtered)} place(s)** match your filters.")
 
         if len(filtered) == 0:
             st.warning("No places match your current filters. Try broadening them!")
         else:
-            if st.button("🎲 Pick Random Place!", type="primary", use_container_width=True):
-                choice = random.choice(filtered)
-                st.session_state.last_random_choice = choice
-                st.session_state.reveal_envelope = True
-                st.balloons()
-                st.rerun()
+            # Show button only if no current envelope is displayed
+            if st.session_state.get("show_envelope", False) == False:
+                if st.button("🎲 Pick Random Place!", type="primary", use_container_width=True):
+                    choice = random.choice(filtered)
+                    st.session_state.last_random_choice = choice
+                    st.session_state.show_envelope = True
+                    st.session_state.reveal_envelope = True
+                    st.balloons()
+                    st.rerun()
 
-            if "last_random_choice" in st.session_state:
+            # Show envelope only when triggered
+            if st.session_state.get("show_envelope", False):
                 choice = st.session_state.last_random_choice
-                if choice in filtered:
-                    is_revealed = st.session_state.get("reveal_envelope", False)
-                    reveal_class = "revealed" if is_revealed else ""
 
-                    st.markdown("### 🎉 **Your Random Pick Is Coming...**")
+                if choice not in filtered:
+                    st.info("🍽️ Your previous pick no longer matches the current filters.")
+                    if st.button("Clear and pick a new one"):
+                        for key in ["last_random_choice", "show_envelope", "reveal_envelope"]:
+                            if key in st.session_state:
+                                del st.session_state[key]
+                        st.rerun()
+                else:
+                    reveal_class = "revealed" if st.session_state.get("reveal_envelope", False) else ""
+
+                    st.markdown("<div style='text-align: center; margin-top: 30px;'>", unsafe_allow_html=True)
+                    st.markdown("### 🎉 **Opening your surprise...**")
+                    st.markdown("</div>", unsafe_allow_html=True)
 
                     st.markdown(f"<div class='envelope-reveal {reveal_class}'>", unsafe_allow_html=True)
                     st.markdown("<div class='envelope-flap'></div>", unsafe_allow_html=True)
@@ -591,19 +609,17 @@ else:
                     else:
                         st.info("No reviews yet — you'll be the pioneer!")
 
-                    st.markdown("</div>", unsafe_allow_html=True)  # close envelope-content
-                    st.markdown("</div>", unsafe_allow_html=True)  # close envelope-reveal
+                    st.markdown("</div>", unsafe_allow_html=True)  # close content
+                    st.markdown("</div>", unsafe_allow_html=True)  # close envelope
 
-                    if st.button("🎲 Pick Again!", type="secondary", use_container_width=True):
-                        choice = random.choice(filtered)
-                        st.session_state.last_random_choice = choice
-                        st.session_state.reveal_envelope = True
-                        st.rerun()
-
-                else:
-                    st.info("🍽️ Your previous pick no longer matches the current filters. Hit the button for a new one!")
-                    if st.button("Clear previous pick"):
-                        for key in ["last_random_choice", "reveal_envelope"]:
-                            if key in st.session_state:
-                                del st.session_state[key]
-                        st.rerun()
+                    col1, col2 = st.columns(2)
+                    with col1:
+                        if st.button("🎲 Pick Again!", type="secondary", use_container_width=True):
+                            choice = random.choice(filtered)
+                            st.session_state.last_random_choice = choice
+                            st.session_state.reveal_envelope = True
+                            st.rerun()
+                    with col2:
+                        if st.button("✨ Done — Hide this pick", type="secondary", use_container_width=True):
+                            st.session_state.show_envelope = False
+                            st.rerun()
