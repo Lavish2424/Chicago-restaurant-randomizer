@@ -85,25 +85,88 @@ action = st.sidebar.radio(
 st.sidebar.markdown("---")
 
 with st.sidebar.expander("⚙️ Data Management"):
-    if st.button("Download backup (JSON)"):
-        with open(DATA_FILE, "r") as f:
-            st.download_button(
-                label="Download restaurants.json",
-                data=f.read(),
-                file_name="restaurants.json",
-                mime="application/json"
-            )
-    
-    uploaded_backup = st.file_uploader("Restore from backup", type=["json"], key="backup_uploader")
+    # DOWNLOAD BACKUP (now includes images as ZIP)
+    if st.button("Download backup (JSON + Images)"):
+        import zipfile
+        from io import BytesIO
+
+        # Create a ZIP file in memory
+        zip_buffer = BytesIO()
+        with zipfile.ZipFile(zip_buffer, "w", zipfile.ZIP_DEFLATED) as zip_file:
+            # Add the JSON data file
+            if os.path.exists(DATA_FILE):
+                zip_file.write(DATA_FILE, os.path.basename(DATA_FILE))
+            else:
+                # If no data yet, create an empty one
+                empty_data = []
+                json_bytes = json.dumps(empty_data, indent=4).encode('utf-8')
+                zip_file.writestr(os.path.basename(DATA_FILE), json_bytes)
+
+            # Add all images
+            if os.path.exists(IMAGES_DIR):
+                for root, dirs, files in os.walk(IMAGES_DIR):
+                    for file in files:
+                        file_path = os.path.join(root, file)
+                        # Store with relative path inside ZIP (e.g., images/photo.jpg)
+                        arcname = os.path.relpath(file_path, start=os.path.dirname(IMAGES_DIR))
+                        zip_file.write(file_path, arcname)
+
+        zip_buffer.seek(0)
+        st.download_button(
+            label="📥 Download full backup (ZIP)",
+            data=zip_buffer.getvalue(),
+            file_name=f"chicago_restaurants_backup_{datetime.now().strftime('%Y%m%d_%H%M')}.zip",
+            mime="application/zip"
+        )
+
+    # RESTORE FROM BACKUP
+    uploaded_backup = st.file_uploader("Restore from backup (ZIP or JSON)", type=["json", "zip"], key="backup_uploader")
     if uploaded_backup and st.button("Restore Backup", type="primary"):
         try:
-            data = json.load(uploaded_backup)
-            save_data(data)
-            st.session_state.restaurants = data
-            st.success("Backup restored successfully!")
+            if uploaded_backup.type == "application/zip" or uploaded_backup.name.endswith(".zip"):
+                import zipfile
+
+                with zipfile.ZipFile(uploaded_backup, "r") as zip_file:
+                    # Extract JSON
+                    json_found = False
+                    for name in zip_file.namelist():
+                        if os.path.basename(name) == os.path.basename(DATA_FILE):
+                            data_bytes = zip_file.read(name)
+                            data = json.loads(data_bytes)
+                            save_data(data)
+                            st.session_state.restaurants = data
+                            json_found = True
+                            break
+                    if not json_found:
+                        st.error("ZIP file does not contain restaurants.json")
+                        st.stop()
+
+                    # Extract images (overwrite if exist)
+                    for name in zip_file.namelist():
+                        if name.startswith("images/") or name.startswith(IMAGES_DIR + "/"):
+                            # Normalize path
+                            if name.startswith(IMAGES_DIR + "/"):
+                                target_path = os.path.join(os.path.dirname(IMAGES_DIR), name)
+                            else:
+                                target_path = name  # already relative
+                            full_path = os.path.abspath(target_path)
+                            # Security: ensure it's inside IMAGES_DIR
+                            if os.path.commonpath([full_path, os.path.abspath(IMAGES_DIR)]) == os.path.abspath(IMAGES_DIR):
+                                os.makedirs(os.path.dirname(full_path), exist_ok=True)
+                                with open(full_path, "wb") as f:
+                                    f.write(zip_file.read(name))
+
+                st.success("Full backup (JSON + images) restored successfully!")
+            else:
+                # Old JSON-only restore
+                data = json.load(uploaded_backup)
+                save_data(data)
+                st.session_state.restaurants = data
+                st.success("JSON backup restored (images not included in this backup type)")
+
             st.rerun()
-        except Exception:
-            st.error("Invalid or corrupted backup file.")
+        except Exception as e:
+            st.error(f"Error restoring backup: {str(e)}")
 
 st.sidebar.caption("Built by Alan, made for us ❤️")
 
