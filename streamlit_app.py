@@ -4,7 +4,7 @@ import os
 import random
 import urllib.parse
 import uuid
-from datetime import datetime, date
+from datetime import datetime
 import zipfile
 from io import BytesIO
 
@@ -35,7 +35,6 @@ def load_data():
                     if "visited" not in place: place["visited"] = False
                     if "photos" not in place: place["photos"] = []
                     if "reviews" not in place: place["reviews"] = []
-                    if "reservations" not in place: place["reservations"] = []
                     if "added_date" not in place: place["added_date"] = datetime.now().isoformat()
                 return data
         except json.JSONDecodeError:
@@ -53,7 +52,7 @@ if "restaurants" not in st.session_state:
 restaurants = st.session_state.restaurants
 
 st.markdown("<h1 style='text-align: center;'>🍽️ Chicago Restaurant/Bar Randomizer</h1>", unsafe_allow_html=True)
-st.markdown("<p style='text-align: center;'>Add, favorite, reserve, and randomly pick Chicago eats & drinks! 🍸</p>", unsafe_allow_html=True)
+st.markdown("<p style='text-align: center;'>Add, favorite, and randomly pick Chicago eats & drinks! 🍸</p>", unsafe_allow_html=True)
 
 st.sidebar.header("Actions")
 action = st.sidebar.radio("What do you want to do?", ["View All Places", "Add a Place", "Random Pick (with filters)"])
@@ -168,10 +167,8 @@ if action == "View All Places":
             fav = " ❤️" if r.get("favorite") else ""
             visited = " ✅" if r.get("visited") else ""
             stars = f" • {sum(rev['rating'] for rev in r['reviews'])/len(r['reviews']):.1f}⭐ ({len(r['reviews'])})" if r["reviews"] else ""
-            resv_count = len(r.get("reservations", []))
-            resv_text = f" • {resv_count} reservation(s)" if resv_count else ""
 
-            with st.expander(f"{r['name']}{icon}{fav}{visited} • {r['cuisine']} • {r['price']} • {r['location']}{stars}{resv_text}",
+            with st.expander(f"{r['name']}{icon}{fav}{visited} • {r['cuisine']} • {r['price']} • {r['location']}{stars}",
                              expanded=(f"edit_mode_{global_idx}" in st.session_state)):
                 if f"edit_mode_{global_idx}" not in st.session_state:
                     col1, col2 = st.columns([3, 1])
@@ -214,31 +211,19 @@ if action == "View All Places":
                     else:
                         st.write("_No reviews yet — be the first!_")
 
-                    # Show reservations
-                    if r.get("reservations"):
-                        st.write("**Reservations**")
-                        for res in sorted(r["reservations"], key=lambda x: x["date"]):
-                            st.write(f"📅 **{res['date']}** at {res['time']} — Party of {res['party_size']}")
-                            if res.get("notes"):
-                                st.write(f"_{res['notes']}_")
-                            st.markdown("---")
-                    else:
-                        st.write("_No reservations yet_")
-
                 else:
                     st.subheader(f"Editing: {r['name']}")
                     with st.form(key=f"edit_form_{global_idx}"):
                         new_name = st.text_input("Name*", value=r["name"])
-                        new_cuisine = st.selectbox("Cuisine/Style*", CUISINES, index=CUISINES.index(r["cuisine"]) if r["cuisine"] in CUISINES else 0)
+                        new_cuisine = st.selectbox("Cuisine/Style*", CUISINES, index=CUISINES.index(r["cuisine"]))
                         new_price = st.selectbox("Price*", ["$", "$$", "$$$", "$$$$"], index=["$", "$$", "$$$", "$$$$"].index(r["price"]))
                         new_location = st.selectbox("Neighborhood*", NEIGHBORHOODS, index=NEIGHBORHOODS.index(r["location"]) if r["location"] in NEIGHBORHOODS else 0)
                         new_address = st.text_input("Address*", value=r.get("address", ""))
                         new_type = st.selectbox("Type*", ["restaurant", "cocktail_bar"],
                                                 format_func=lambda x: "Restaurant 🍽️" if x=="restaurant" else "Cocktail Bar 🍸",
-                                                index=0 if r.get("type","restaurant")=="restaurant" else 1)
+                                                index=0 if r.get("type")=="restaurant" else 1)
                         new_visited = st.checkbox("✅ I've already visited", value=r.get("visited", False))
 
-                        # Reviews
                         st.write("**Reviews / Notes**")
                         reviews_to_delete = []
                         for i, rev in enumerate(r["reviews"]):
@@ -253,39 +238,10 @@ if action == "View All Places":
                             rev["rating"] = new_rating
                             rev["comment"] = new_comment
 
-                        st.write("Add new note")
-                        new_rev_rating = st.slider("Rating", 1, 5, 5, key=f"newrat_{global_idx}")
-                        new_rev_comment = st.text_area("Comment", height=80, key=f"newcom_{global_idx}")
+                        st.write("Add new note (optional)")
+                        new_rev_rating = st.slider("Rating", 1, 5, 5)
+                        new_rev_comment = st.text_area("Comment", height=80, key=f"new_rev_{global_idx}")
 
-                        # Reservations
-                        st.write("**Reservations**")
-                        res_to_delete = []
-                        for i, res in enumerate(r.get("reservations", [])):
-                            col1, col2, col3, col4, col_del = st.columns([2, 1.5, 1, 3, 1])
-                            with col1:
-                                new_date = st.date_input("Date", value=datetime.strptime(res["date"], "%Y-%m-%d").date(), key=f"resdate_{global_idx}_{i}")
-                            with col2:
-                                new_time = st.time_input("Time", value=datetime.strptime(res["time"], "%H:%M").time(), key=f"restime_{global_idx}_{i}")
-                            with col3:
-                                new_party = st.number_input("Party", 1, 20, value=res["party_size"], key=f"resparty_{global_idx}_{i}")
-                            with col4:
-                                new_notes = st.text_input("Notes", value=res.get("notes", ""), key=f"resnotes_{global_idx}_{i}")
-                            with col_del:
-                                if st.checkbox("Delete", key=f"del_res_{global_idx}_{i}"):
-                                    res_to_delete.append(i)
-                            # Update in place
-                            res["date"] = new_date.strftime("%Y-%m-%d")
-                            res["time"] = new_time.strftime("%H:%M")
-                            res["party_size"] = new_party
-                            res["notes"] = new_notes
-
-                        st.write("Add new reservation")
-                        add_date = st.date_input("Date", value=date.today(), key=f"adddate_{global_idx}")
-                        add_time = st.time_input("Time", value=datetime.now().time(), key=f"addtime_{global_idx}")
-                        add_party = st.number_input("Party size", 1, 20, value=2, key=f"addparty_{global_idx}")
-                        add_notes = st.text_input("Notes (optional)", key=f"addnotes_{global_idx}")
-
-                        # Photos
                         st.write("**Photos (check to delete)**")
                         photos_to_delete = []
                         if r.get("photos"):
@@ -315,17 +271,13 @@ if action == "View All Places":
                             elif new_name.lower().strip() != r["name"].lower() and any(e["name"].lower() == new_name.lower().strip() for e in restaurants if e != r):
                                 st.warning("Name already exists!")
                             else:
-                                # Handle deletions
                                 for p in photos_to_delete:
                                     if os.path.exists(p): os.remove(p)
                                     if p in r["photos"]: r["photos"].remove(p)
-                                for i in sorted(reviews_to_delete + res_to_delete, reverse=True):
-                                    if i < len(r["reviews"]):
-                                        del r["reviews"][i]
-                                    else:
-                                        del r["reservations"][i - len(r["reviews"])]
 
-                                # Add new review
+                                for i in sorted(reviews_to_delete, reverse=True):
+                                    del r["reviews"][i]
+
                                 if new_rev_comment.strip():
                                     r["reviews"].append({
                                         "rating": new_rev_rating,
@@ -334,15 +286,6 @@ if action == "View All Places":
                                         "date": datetime.now().strftime("%B %d, %Y")
                                     })
 
-                                # Add new reservation
-                                r["reservations"].append({
-                                    "date": add_date.strftime("%Y-%m-%d"),
-                                    "time": add_time.strftime("%H:%M"),
-                                    "party_size": add_party,
-                                    "notes": add_notes
-                                })
-
-                                # Add photos
                                 if new_photos:
                                     safe = "".join(c for c in new_name if c.isalnum() or c in " -_").replace(" ", "_")
                                     for photo in new_photos:
@@ -400,7 +343,7 @@ elif action == "Add a Place":
                 new = {
                     "name": name.strip(), "cuisine": cuisine, "price": price, "location": location,
                     "address": address.strip(), "type": place_type, "favorite": False, "visited": visited,
-                    "photos": photo_paths, "reviews": [], "reservations": [], "added_date": datetime.now().isoformat()
+                    "photos": photo_paths, "reviews": [], "added_date": datetime.now().isoformat()
                 }
                 if quick_notes.strip():
                     new["reviews"].append({
@@ -469,31 +412,6 @@ else:
                     with col_vis:
                         st.button("✅ Mark as Unvisited" if c.get("visited") else "✅ Mark as Visited",
                                   key=f"rand_vis_{idx}", on_click=toggle_visited, args=(idx,))
-
-                    # Quick Add Reservation
-                    st.markdown("### Quick Reservation")
-                    with st.form(key=f"quick_res_form_{idx}"):
-                        col_d, col_t = st.columns(2)
-                        with col_d:
-                            res_date = st.date_input("Date", value=date.today(), key=f"qdate_{idx}")
-                        with col_t:
-                            res_time = st.time_input("Time", value=datetime.now().time(), key=f"qtime_{idx}")
-                        col_p, col_n = st.columns(2)
-                        with col_p:
-                            res_party = st.number_input("Party size", 1, 20, 2, key=f"qparty_{idx}")
-                        with col_n:
-                            res_notes = st.text_input("Notes (optional)", key=f"qnotes_{idx}")
-                        if st.form_submit_button("📅 Add Reservation", type="primary"):
-                            c["reservations"].append({
-                                "date": res_date.strftime("%Y-%m-%d"),
-                                "time": res_time.strftime("%H:%M"),
-                                "party_size": res_party,
-                                "notes": res_notes
-                            })
-                            save_data(restaurants)
-                            st.success("Reservation added!")
-                            st.balloons()
-                            st.rerun()
 
                     if c.get("photos"):
                         st.markdown("### Photos")
