@@ -61,11 +61,78 @@ def save_data(data):
     with open(DATA_FILE, "w") as f:
         json.dump(data, f, indent=4)
 
-# Load data into session state
 if "restaurants" not in st.session_state:
     st.session_state.restaurants = load_data()
 
 restaurants = st.session_state.restaurants
+
+# Custom CSS for the envelope reveal animation
+st.markdown("""
+<style>
+/* Envelope container */
+.envelope-reveal {
+    perspective: 1200px;
+    width: 100%;
+    max-width: 700px;
+    margin: 40px auto;
+    position: relative;
+    height: 420px;
+}
+
+/* Top flap of the envelope */
+.envelope-flap {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 220px;
+    background: linear-gradient(to bottom, #ff4444, #cc0000);
+    clip-path: polygon(0% 0%, 100% 0%, 50% 100%);
+    transform-origin: top;
+    transition: transform 1.4s ease-in-out;
+    z-index: 10;
+    box-shadow: 0 4px 20px rgba(0,0,0,0.3);
+}
+
+/* Flap opens when revealed */
+.revealed .envelope-flap {
+    transform: rotateX(-180deg);
+}
+
+/* Bottom part of the envelope */
+.envelope-bottom {
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    width: 100%;
+    height: 300px;
+    background: linear-gradient(to top, #ff4444, #ff6666);
+    clip-path: polygon(0% 35%, 50% 100%, 100% 35%, 100% 100%, 0% 100%);
+    box-shadow: 0 10px 30px rgba(0,0,0,0.4);
+}
+
+/* The "letter" card inside */
+.envelope-content {
+    position: absolute;
+    top: 80px;
+    left: 0;
+    width: 100%;
+    background: white;
+    border-radius: 12px;
+    padding: 30px;
+    box-shadow: 0 15px 40px rgba(0,0,0,0.35);
+    opacity: 0;
+    transform: translateY(60px);
+    transition: opacity 1s ease 0.7s, transform 1s ease 0.7s;
+}
+
+/* Content appears after flap opens */
+.revealed .envelope-content {
+    opacity: 1;
+    transform: translateY(0);
+}
+</style>
+""", unsafe_allow_html=True)
 
 # Page title
 st.markdown("<h1 style='text-align: center;'>🍽️ Chicago Restaurant/Bar Randomizer</h1>", unsafe_allow_html=True)
@@ -126,7 +193,7 @@ def google_maps_link(address, name=""):
     encoded = urllib.parse.quote(query)
     return f"https://www.google.com/maps/search/?api=1&query={encoded}"
 
-# Header based on action
+# Headers
 if action == "View All Places":
     st.header("All Places")
     st.caption(f"{len(restaurants)} place(s) in your list")
@@ -140,7 +207,7 @@ elif action == "Random Pick (with filters)":
     st.header("🎲 Random Place Picker")
     st.markdown("Apply filters below, then let fate decide!")
 
-# View All / Favorites
+# View All Places & Favorites
 if action in ["View All Places", "Favorites ❤️"]:
     display_places = [r for r in restaurants if r.get("favorite", False)] if action == "Favorites ❤️" else restaurants
     
@@ -236,7 +303,7 @@ if action in ["View All Places", "Favorites ❤️"]:
             st.markdown("---")
             st.subheader(f"Editing: {r['name']}")
 
-            with st.form("edit_restaurant_form", clear_on_submit=False):
+            with st.form("edit_restaurant_form"):
                 new_name = st.text_input("Name*", value=r["name"])
                 current_cuisine = r["cuisine"]
                 cuisine_option = st.selectbox(
@@ -301,14 +368,12 @@ if action in ["View All Places", "Favorites ❤️"]:
                     elif new_name.lower() != r["name"].lower() and any(existing["name"].lower() == new_name.lower() for existing in restaurants if existing != r):
                         st.warning("Another place with this name already exists!")
                     else:
-                        # Delete selected photos
                         for photo_path in photos_to_delete:
                             if os.path.exists(photo_path):
                                 os.remove(photo_path)
                             if photo_path in r["photos"]:
                                 r["photos"].remove(photo_path)
 
-                        # Add new photos with UUID
                         if new_photos:
                             safe_name = "".join(c for c in new_name if c.isalnum() or c in " -_").replace(" ", "_")
                             for photo in new_photos:
@@ -319,7 +384,6 @@ if action in ["View All Places", "Favorites ❤️"]:
                                     f.write(photo.getbuffer())
                                 r["photos"].append(filepath)
 
-                        # Update data
                         r.update({
                             "name": new_name.strip(),
                             "cuisine": new_cuisine,
@@ -430,7 +494,7 @@ elif action == "Add a Review":
                     st.success("Thank you! Review added 🎉")
                     st.rerun()
 
-# Random Pick
+# Random Pick with Envelope Animation
 else:
     if not restaurants:
         st.info("No places yet — add some first!")
@@ -476,51 +540,70 @@ else:
             if st.button("🎲 Pick Random Place!", type="primary", use_container_width=True):
                 choice = random.choice(filtered)
                 st.session_state.last_random_choice = choice
+                st.session_state.reveal_envelope = True
                 st.balloons()
                 st.rerun()
 
             if "last_random_choice" in st.session_state:
                 choice = st.session_state.last_random_choice
                 if choice in filtered:
-                    st.markdown("### 🎉 **Your Random Pick Is...**")
-                    with st.container(border=True):
-                        type_tag = " 🍸 Cocktail Bar" if choice.get("type") == "cocktail_bar" else " 🍽️ Restaurant"
-                        fav_tag = " ❤️" if choice.get("favorite", False) else ""
-                        st.markdown(f"# {choice['name']}{type_tag}{fav_tag}")
-                        st.write(f"**Cuisine:** {choice['cuisine']} • **Price:** {choice['price']} • **Location:** {choice['location']}")
-                        st.write(f"**Address:** {choice.get('address', 'Not provided')}")
-                        maps_url = google_maps_link(choice.get("address", ""), choice["name"])
-                        st.markdown(f"[📍 Open in Google Maps]({maps_url})")
+                    is_revealed = st.session_state.get("reveal_envelope", False)
+                    reveal_class = "revealed" if is_revealed else ""
 
-                        global_idx = restaurants.index(choice)
-                        st.button(
-                            "❤️ Remove from Favorites" if choice.get("favorite", False) else "❤️ Add to Favorites",
-                            key=f"rand_fav_{global_idx}",
-                            on_click=toggle_favorite,
-                            args=(global_idx,)
-                        )
+                    st.markdown("### 🎉 **Your Random Pick Is Coming...**")
 
-                        if choice.get("photos"):
-                            st.markdown("### Photos")
-                            cols = st.columns(3)
-                            for idx, photo_path in enumerate(choice["photos"]):
-                                if os.path.exists(photo_path):
-                                    cols[idx % 3].image(photo_path, use_column_width=True)
+                    st.markdown(f"<div class='envelope-reveal {reveal_class}'>", unsafe_allow_html=True)
+                    st.markdown("<div class='envelope-flap'></div>", unsafe_allow_html=True)
+                    st.markdown("<div class='envelope-bottom'></div>", unsafe_allow_html=True)
 
-                        if choice["reviews"]:
-                            st.markdown("### Recent Reviews")
-                            for rev in choice["reviews"][-3:]:
-                                st.write(f"**{'★' * rev['rating']}{'☆' * (5 - rev['rating'])}** — {rev['reviewer']} ({rev['date']})")
-                                st.write(f"_{rev['comment']}_")
-                        else:
-                            st.info("No reviews yet — you'll be the pioneer!")
+                    st.markdown("<div class='envelope-content'>", unsafe_allow_html=True)
 
-                        if st.button("🎲 Pick Again!", type="secondary", use_container_width=True):
-                            choice = random.choice(filtered)
-                            st.session_state.last_random_choice = choice
-                            st.rerun()
+                    type_tag = " 🍸 Cocktail Bar" if choice.get("type") == "cocktail_bar" else " 🍽️ Restaurant"
+                    fav_tag = " ❤️" if choice.get("favorite", False) else ""
+                    st.markdown(f"# {choice['name']}{type_tag}{fav_tag}")
+
+                    st.write(f"**Cuisine:** {choice['cuisine']} • **Price:** {choice['price']} • **Location:** {choice['location']}")
+                    st.write(f"**Address:** {choice.get('address', 'Not provided')}")
+
+                    maps_url = google_maps_link(choice.get("address", ""), choice["name"])
+                    st.markdown(f"[📍 Open in Google Maps]({maps_url})")
+
+                    global_idx = restaurants.index(choice)
+                    st.button(
+                        "❤️ Remove from Favorites" if choice.get("favorite", False) else "❤️ Add to Favorites",
+                        key=f"rand_fav_{global_idx}",
+                        on_click=toggle_favorite,
+                        args=(global_idx,)
+                    )
+
+                    if choice.get("photos"):
+                        st.markdown("### Photos")
+                        cols = st.columns(3)
+                        for idx, photo_path in enumerate(choice["photos"]):
+                            if os.path.exists(photo_path):
+                                cols[idx % 3].image(photo_path, use_column_width=True)
+
+                    if choice["reviews"]:
+                        st.markdown("### Recent Reviews")
+                        for rev in choice["reviews"][-3:]:
+                            st.write(f"**{'★' * rev['rating']}{'☆' * (5 - rev['rating'])}** — {rev['reviewer']} ({rev['date']})")
+                            st.write(f"_{rev['comment']}_")
+                    else:
+                        st.info("No reviews yet — you'll be the pioneer!")
+
+                    st.markdown("</div>", unsafe_allow_html=True)  # close envelope-content
+                    st.markdown("</div>", unsafe_allow_html=True)  # close envelope-reveal
+
+                    if st.button("🎲 Pick Again!", type="secondary", use_container_width=True):
+                        choice = random.choice(filtered)
+                        st.session_state.last_random_choice = choice
+                        st.session_state.reveal_envelope = True
+                        st.rerun()
+
                 else:
                     st.info("🍽️ Your previous pick no longer matches the current filters. Hit the button for a new one!")
                     if st.button("Clear previous pick"):
-                        del st.session_state.last_random_choice
+                        for key in ["last_random_choice", "reveal_envelope"]:
+                            if key in st.session_state:
+                                del st.session_state[key]
                         st.rerun()
