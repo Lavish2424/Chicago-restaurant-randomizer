@@ -504,7 +504,7 @@ elif action == "Add a Place":
                 st.rerun()
 
 # Add Review and Random Pick remain mostly the same, but Random Pick now logs to history
-elif action == "Add a Review":
+    elif action == "Add a Review":
     # ... (same as before, unchanged for brevity)
 
 elif action == "Random Pick (with filters)":
