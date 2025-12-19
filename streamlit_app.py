@@ -7,7 +7,6 @@ import uuid
 from datetime import datetime
 import zipfile
 from io import BytesIO
-import time
 
 DATA_FILE = "restaurants.json"
 IMAGES_DIR = "images"
@@ -334,7 +333,7 @@ elif action == "Add a Place":
                 st.balloons()
                 st.rerun()
 
-# ────────────────────────────── Random Pick with Slot Machine Effect ──────────────────────────────
+# ────────────────────────────── Random Pick with Confetti ──────────────────────────────
 else:
     st.header("🎲 Random Place Picker")
     if not restaurants:
@@ -366,105 +365,20 @@ else:
         if not filtered:
             st.warning("No matches – try broader filters!")
         else:
-            # Placeholder for slot machine reels
-            reels_container = st.empty()
-            reels_container.markdown("<h2 style='text-align:center;'>[ SLOT MACHINE ]</h2>", unsafe_allow_html=True)
-
-            if st.button("🎲 SPIN!", type="primary", use_container_width=True):
-                # Create 3 reels (columns) with placeholders
-                reel_cols = reels_container.columns(3)
-                placeholders = [col.empty() for col in reel_cols]
-
-                # Fake items for spinning effect (mix of emojis and words)
-                spin_items = ["🍽️", "🍸", "🍕", "🌮", "🍔", "🍜", "🍣", "🥩", "🍰", "🍷", "🍺", "🎲", "?", "???", "!!!"]
-
-                # Spin animation duration
-                duration = 3.0  # seconds
-                steps = 60
-                delay = duration / steps
-
-                # Simulate spinning
-                for step in range(steps):
-                    for i in range(3):
-                        # Slow down near the end
-                        if step > steps * 0.7:
-                            delay = 0.15 + (step - steps * 0.7) * 0.01
-                        # Randomly pick items for each reel
-                        item = random.choice(spin_items)
-                        placeholders[i].markdown(f"<h1 style='text-align:center; font-size: 80px;'>{item}</h1>", unsafe_allow_html=True)
-                    time.sleep(delay)
-
-                # Stop the reels one by one with a dramatic pause
+            if st.button("🎲 Pick Random Place!", type="primary", use_container_width=True):
                 picked = random.choice(filtered)
-                time.sleep(0.5)
-                placeholders[0].markdown(f"<h1 style='text-align:center; font-size: 80px;'>{picked['cuisine'][0]}</h1>", unsafe_allow_html=True)
-                time.sleep(0.5)
-                placeholders[1].markdown(f"<h1 style='text-align:center; font-size: 80px;'>{picked['price']}</h1>", unsafe_allow_html=True)
-                time.sleep(0.5)
-                placeholders[2].markdown(f"<h1 style='text-align:center; font-size: 80px;'>{picked['location'][0]}</h1>", unsafe_allow_html=True)
-
-                # Final reveal
-                time.sleep(1.0)
-                reels_container.markdown(
-                    f"""
-                    <h2 style='text-align:center; color:#4CAF50;'>WINNER!</h2>
-                    <h1 style='text-align:center;'>{picked['name']}</h1>
-                    <p style='text-align:center; font-size:24px;'>
-                        {picked['cuisine']} • {picked['price']} • {picked['location']}
-                    </p>
-                    <p style='text-align:center;'>
-                        <a href="{google_maps_link(picked.get('address', ''), picked['name'])}" target="_blank">📍 Open in Google Maps</a>
-                    </p>
-                    """,
-                    unsafe_allow_html=True
-                )
-
                 st.session_state.last_pick = picked
-                st.balloons()
+                st.confetti()        # Beautiful confetti burst!
+                st.balloons()        # Keep the classic balloons too
+                st.rerun()
 
-                # Show detailed info below
-                with st.container(border=True):
-                    tag = " 🍸 Cocktail Bar" if picked.get("type")=="cocktail_bar" else " 🍽️ Restaurant"
-                    fav = " ❤️" if picked.get("favorite") else ""
-                    vis = " ✅ Visited" if picked.get("visited") else ""
-                    st.markdown(f"### {picked['name']}{tag}{fav}{vis}")
-                    st.write(f"{picked['cuisine']} • {picked['price']} • {picked['location']}")
-                    st.write(f"**Address:** {picked.get('address','')}")
-                    st.markdown(f"[📍 Google Maps]({google_maps_link(picked.get('address',''), picked['name'])})")
-
-                    idx = restaurants.index(picked)
-
-                    col_fav, col_vis = st.columns(2)
-                    with col_fav:
-                        st.button("❤️ Unfavorite" if picked.get("favorite") else "❤️ Favorite",
-                                  key=f"rand_fav_{idx}", on_click=toggle_favorite, args=(idx,))
-                    with col_vis:
-                        st.button("✅ Mark as Unvisited" if picked.get("visited") else "✅ Mark as Visited",
-                                  key=f"rand_vis_{idx}", on_click=toggle_visited, args=(idx,))
-
-                    if picked.get("photos"):
-                        st.markdown("### Photos")
-                        photo_cols = st.columns(3)
-                        for i, p in enumerate(picked["photos"]):
-                            if os.path.exists(p): photo_cols[i%3].image(p, use_column_width=True)
-
-                    if picked["reviews"]:
-                        st.markdown("### Notes")
-                        for rev in picked["reviews"]:
-                            st.write(f"**{rev['reviewer']} ({rev['date']})**")
-                            st.write(f"_{rev['comment']}_")
-                    else:
-                        st.info("No notes yet!")
-
-            # If there's a previous pick and it still matches filters, show it
             if "last_pick" in st.session_state and st.session_state.last_pick in filtered:
-                st.markdown("### Last Spin Result")
                 c = st.session_state.last_pick
                 with st.container(border=True):
                     tag = " 🍸 Cocktail Bar" if c.get("type")=="cocktail_bar" else " 🍽️ Restaurant"
                     fav = " ❤️" if c.get("favorite") else ""
                     vis = " ✅ Visited" if c.get("visited") else ""
-                    st.markdown(f"### {c['name']}{tag}{fav}{vis}")
+                    st.markdown(f"# {c['name']}{tag}{fav}{vis}")
                     st.write(f"{c['cuisine']} • {c['price']} • {c['location']}")
                     st.write(f"**Address:** {c.get('address','')}")
                     st.markdown(f"[📍 Google Maps]({google_maps_link(c.get('address',''), c['name'])})")
@@ -493,10 +407,14 @@ else:
                     else:
                         st.info("No notes yet!")
 
-                if st.button("Spin Again!", type="secondary", use_container_width=True):
-                    st.rerun()
+                    if st.button("🎲 Pick Again!", type="secondary", use_container_width=True):
+                        picked = random.choice(filtered)
+                        st.session_state.last_pick = picked
+                        st.confetti()
+                        st.balloons()
+                        st.rerun()
             elif "last_pick" in st.session_state:
-                st.info("Previous pick no longer matches filters – spin again!")
-                if st.button("Clear previous result"):
+                st.info("Previous pick no longer matches filters – pick again!")
+                if st.button("Clear previous pick"):
                     del st.session_state.last_pick
                     st.rerun()
