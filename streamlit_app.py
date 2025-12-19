@@ -333,7 +333,7 @@ elif action == "Add a Place":
                 st.balloons()
                 st.rerun()
 
-# ────────────────────────────── Random Pick with Confetti ──────────────────────────────
+# ────────────────────────────── Random Pick with Balloons ──────────────────────────────
 else:
     st.header("🎲 Random Place Picker")
     if not restaurants:
@@ -368,8 +368,7 @@ else:
             if st.button("🎲 Pick Random Place!", type="primary", use_container_width=True):
                 picked = random.choice(filtered)
                 st.session_state.last_pick = picked
-                st.confetti()        # Beautiful confetti burst!
-                st.balloons()        # Keep the classic balloons too
+                st.balloons()  # Classic celebration!
                 st.rerun()
 
             if "last_pick" in st.session_state and st.session_state.last_pick in filtered:
@@ -410,7 +409,6 @@ else:
                     if st.button("🎲 Pick Again!", type="secondary", use_container_width=True):
                         picked = random.choice(filtered)
                         st.session_state.last_pick = picked
-                        st.confetti()
                         st.balloons()
                         st.rerun()
             elif "last_pick" in st.session_state:
