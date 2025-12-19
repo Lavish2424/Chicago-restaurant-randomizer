@@ -163,7 +163,7 @@ if action == "View All Places":
             icon = " 🍸" if r.get("type") == "cocktail_bar" else " 🍽️"
             fav = " ❤️" if r.get("favorite") else ""
             visited = " ✅" if r.get("visited") else ""
-            stars = f" • {sum(rev['rating'] for rev in r['reviews'])/len(r['reviews']):.1f}⭐ ({len(r['reviews'])})" if r["reviews"] else ""
+            stars = f" • {len(r['reviews'])} note{'s' if len(r['reviews']) != 1 else ''}" if r["reviews"] else ""
             with st.expander(f"{r['name']}{icon}{fav}{visited} • {r['cuisine']} • {r['price']} • {r['location']}{stars}",
                              expanded=(f"edit_mode_{global_idx}" in st.session_state)):
                 if f"edit_mode_{global_idx}" not in st.session_state:
@@ -197,13 +197,13 @@ if action == "View All Places":
                         for i, p in enumerate(r["photos"]):
                             if os.path.exists(p): cols[i%3].image(p, use_column_width=True)
                     if r["reviews"]:
-                        st.write("**Reviews**")
+                        st.write("**Notes**")
                         for rev in reversed(r["reviews"]):
                             st.write(f"**{rev['reviewer']} ({rev['date']})**")
                             st.write(rev['comment'])
                             st.markdown("---")
                     else:
-                        st.write("_No reviews yet — be the first!_")
+                        st.write("_No notes yet — be the first!_")
                 else:
                     st.subheader(f"Editing: {r['name']}")
                     with st.form(key=f"edit_form_{global_idx}"):
@@ -216,7 +216,7 @@ if action == "View All Places":
                                                 format_func=lambda x: "Restaurant 🍽️" if x=="restaurant" else "Cocktail Bar 🍸",
                                                 index=0 if r.get("type")=="restaurant" else 1)
                         new_visited = st.checkbox("✅ I've already visited", value=r.get("visited", False))
-                        st.write("**Reviews / Notes**")
+                        st.write("**Notes**")
                         reviews_to_delete = []
                         for i, rev in enumerate(r["reviews"]):
                             col_text, col_del = st.columns([6, 1])
@@ -350,20 +350,6 @@ else:
         with col2:
             location_filter = st.multiselect("Neighborhood", sorted({r["location"] for r in restaurants}))
 
-        # Clear all filters button
-        if st.button("🔄 Clear All Filters"):
-            st.session_state.clear_filters = True
-            st.rerun()
-
-        if "clear_filters" in st.session_state:
-            cuisine_filter = []
-            price_filter = []
-            type_filter = "all"
-            only_fav = False
-            visited_filter = "All"
-            location_filter = []
-            del st.session_state.clear_filters
-
         filtered = [r for r in restaurants
                     if (not only_fav or r.get("favorite"))
                     and (type_filter == "all" or r.get("type") == type_filter)
@@ -412,12 +398,12 @@ else:
                             if os.path.exists(p): cols[i%3].image(p, use_column_width=True)
 
                     if c["reviews"]:
-                        st.markdown("### Reviews")
+                        st.markdown("### Notes")
                         for rev in c["reviews"]:
                             st.write(f"**{rev['reviewer']} ({rev['date']})**")
                             st.write(f"_{rev['comment']}_")
                     else:
-                        st.info("No reviews yet!")
+                        st.info("No notes yet!")
 
                     if st.button("🎲 Pick Again!", type="secondary", use_container_width=True):
                         st.session_state.last_pick = random.choice(filtered)
