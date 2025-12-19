@@ -286,7 +286,7 @@ if action == "View All Places":
                 else:
                     st.write("_No reviews yet — be the first!_")
 
-        # Edit form
+        # Edit form (unchanged from previous version)
         if "editing_index" in st.session_state:
             edit_idx = st.session_state.editing_index
             r = restaurants[edit_idx]
@@ -387,7 +387,7 @@ elif action == "Add a Place":
                                   format_func=lambda x: "Restaurant 🍽️" if x == "restaurant" else "Cocktail Bar 🍸")
         visited = st.checkbox("✅ I've already visited this place")
 
-        # Optional quick notes — right before photos
+        # Quick notes moved ABOVE photos
         quick_notes = st.text_area(
             "Quick notes / first impressions (optional)",
             placeholder="e.g., Amazing deep dish, must try the Malnati Chicago Classic! Great vibe.",
