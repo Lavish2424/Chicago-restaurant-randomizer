@@ -232,7 +232,7 @@ if action == "Map View 🗺️":
                 data=df,
                 get_position="[lon, lat]",
                 get_color="color",
-                get_radius=15,
+                get_radius=10,
                 pickable=True,
                 auto_highlight=True,
             )
