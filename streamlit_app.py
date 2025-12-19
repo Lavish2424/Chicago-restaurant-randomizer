@@ -58,7 +58,7 @@ def load_data():
                     if "reviews" not in place:
                         place["reviews"] = []
                     if "added_date" not in place:
-                        place["added_date"] = datetime.now().isoformat()  # fallback for old entries
+                        place["added_date"] = datetime.now().isoformat()
                 return data
         except json.JSONDecodeError:
             st.error("Data file is corrupted. Starting with empty list.")
@@ -69,7 +69,7 @@ def save_data(data):
     with open(DATA_FILE, "w") as f:
         json.dump(data, f, indent=4)
 
-# Load data into session state
+# Load data
 if "restaurants" not in st.session_state:
     st.session_state.restaurants = load_data()
 
@@ -77,33 +77,29 @@ restaurants = st.session_state.restaurants
 
 # Page title
 st.markdown("<h1 style='text-align: center;'>🍽️ Chicago Restaurant/Bar Randomizer</h1>", unsafe_allow_html=True)
-st.markdown("<p style='text-align: center;'>Add, edit, delete, review, favorite, and randomly pick Chicago eats & drinks! 🍸</p>", unsafe_allow_html=True)
+st.markdown("<p style='text-align: center;'>Add, review, favorite, and randomly pick Chicago eats & drinks! 🍸</p>", unsafe_allow_html=True)
 
 # Sidebar
 st.sidebar.header("Actions")
 action = st.sidebar.radio(
     "What do you want to do?",
     ["View All Places",
-     "Add a Place",
-     "Add a Review",
+     "Add a Place / Leave a Review",
      "Random Pick (with filters)"]
 )
 
 st.sidebar.markdown("---")
 
 with st.sidebar.expander("⚙️ Data Management"):
-    # DOWNLOAD BACKUP (JSON + Images as ZIP)
     if st.button("Download backup (JSON + Images)"):
         zip_buffer = BytesIO()
         with zipfile.ZipFile(zip_buffer, "w", zipfile.ZIP_DEFLATED) as zip_file:
-            # Add JSON
             if os.path.exists(DATA_FILE):
                 zip_file.write(DATA_FILE, os.path.basename(DATA_FILE))
             else:
                 empty_data = []
                 json_bytes = json.dumps(empty_data, indent=4).encode('utf-8')
                 zip_file.writestr(os.path.basename(DATA_FILE), json_bytes)
-            # Add images
             if os.path.exists(IMAGES_DIR):
                 for root, dirs, files in os.walk(IMAGES_DIR):
                     for file in files:
@@ -118,7 +114,6 @@ with st.sidebar.expander("⚙️ Data Management"):
             mime="application/zip"
         )
 
-    # RESTORE FROM BACKUP
     uploaded_backup = st.file_uploader("Restore from backup (ZIP or JSON)", type=["json", "zip"], key="backup_uploader")
     if uploaded_backup and st.button("Restore Backup", type="primary"):
         try:
@@ -136,25 +131,21 @@ with st.sidebar.expander("⚙️ Data Management"):
                     if not json_found:
                         st.error("ZIP file does not contain restaurants.json")
                         st.stop()
-                    # Extract images
                     for name in zip_file.namelist():
                         if name.startswith("images/") or name.startswith(IMAGES_DIR + "/"):
-                            if name.startswith(IMAGES_DIR + "/"):
-                                target_path = os.path.join(os.path.dirname(IMAGES_DIR), name)
-                            else:
-                                target_path = name
+                            target_path = name if not name.startswith(IMAGES_DIR + "/") else os.path.join(os.path.dirname(IMAGES_DIR), name)
                             full_path = os.path.abspath(target_path)
                             if os.path.commonpath([full_path, os.path.abspath(IMAGES_DIR)]) == os.path.abspath(IMAGES_DIR):
                                 os.makedirs(os.path.dirname(full_path), exist_ok=True)
                                 with open(full_path, "wb") as f:
                                     f.write(zip_file.read(name))
-                st.success("Full backup (JSON + images) restored successfully!")
+                st.success("Full backup restored successfully!")
                 st.balloons()
             else:
                 data = json.load(uploaded_backup)
                 save_data(data)
                 st.session_state.restaurants = data
-                st.success("JSON backup restored (images not included in this backup type)")
+                st.success("JSON backup restored")
                 st.balloons()
             st.rerun()
         except Exception as e:
@@ -192,7 +183,6 @@ if action == "View All Places":
     if not restaurants:
         st.info("No places added yet.")
     else:
-        # Search and Sort
         col_search, col_sort = st.columns([5, 3])
         with col_search:
             search_term = st.text_input(
@@ -208,16 +198,13 @@ if action == "View All Places":
                 key="sort_select"
             )
 
-        # Clear search button
         if search_term:
             if st.button("✖ Clear search", key="clear_search_btn"):
                 st.session_state.search_input = ""
                 st.rerun()
 
-        # Start filtering with all places
         filtered = restaurants.copy()
 
-        # Text search
         if search_term:
             search_lower = search_term.lower()
             filtered = [
@@ -229,7 +216,6 @@ if action == "View All Places":
             ]
             st.caption(f"**Found {len(filtered)} place(s)** matching '{search_term}'")
 
-        # Sorting
         if sort_option == "A-Z (Name)":
             sorted_places = sorted(filtered, key=lambda x: x["name"].lower())
         elif sort_option == "Latest Added":
@@ -237,12 +223,10 @@ if action == "View All Places":
         elif sort_option == "Favorites First":
             favorites = [r for r in filtered if r.get("favorite", False)]
             non_favorites = [r for r in filtered if not r.get("favorite", False)]
-            sorted_places = sorted(favorites, key=lambda x: x["name"].lower()) + \
-                            sorted(non_favorites, key=lambda x: x["name"].lower())
+            sorted_places = sorted(favorites, key=lambda x: x["name"].lower()) + sorted(non_favorites, key=lambda x: x["name"].lower())
 
         st.write(f"**Showing {len(sorted_places)} place(s)**")
 
-        # Display list
         for idx, r in enumerate(sorted_places):
             global_idx = restaurants.index(r)
             type_icon = " 🍸" if r.get("type") == "cocktail_bar" else " 🍽️"
@@ -302,7 +286,6 @@ if action == "View All Places":
                 else:
                     st.write("_No reviews yet — be the first!_")
 
-        # Edit form (same as before)
         if "editing_index" in st.session_state:
             edit_idx = st.session_state.editing_index
             r = restaurants[edit_idx]
@@ -311,27 +294,18 @@ if action == "View All Places":
             with st.form("edit_restaurant_form", clear_on_submit=False):
                 new_name = st.text_input("Name*", value=r["name"])
                 current_cuisine = r["cuisine"]
-                cuisine_option = st.selectbox(
-                    "Cuisine/Style*",
-                    options=CUISINES,
-                    index=CUISINES.index(current_cuisine) if current_cuisine in CUISINES else CUISINES.index("Other")
-                )
+                cuisine_option = st.selectbox("Cuisine/Style*", options=CUISINES,
+                    index=CUISINES.index(current_cuisine) if current_cuisine in CUISINES else CUISINES.index("Other"))
                 new_cuisine = st.text_input("Custom cuisine*", value=current_cuisine if cuisine_option == "Other" else "") if cuisine_option == "Other" else cuisine_option
                 new_price = st.selectbox("Price Range*", ["$", "$$", "$$$", "$$$$"], index=["$", "$$", "$$$", "$$$$"].index(r["price"]))
                 current_location = r["location"]
-                location_option = st.selectbox(
-                    "Neighborhood*",
-                    options=NEIGHBORHOODS + ["Other"],
-                    index=NEIGHBORHOODS.index(current_location) if current_location in NEIGHBORHOODS else len(NEIGHBORHOODS)
-                )
+                location_option = st.selectbox("Neighborhood*", options=NEIGHBORHOODS + ["Other"],
+                    index=NEIGHBORHOODS.index(current_location) if current_location in NEIGHBORHOODS else len(NEIGHBORHOODS))
                 new_location = st.text_input("Custom neighborhood*", value=current_location if location_option == "Other" else "") if location_option == "Other" else location_option
                 new_address = st.text_input("Address*", value=r.get("address", ""))
-                new_type = st.selectbox(
-                    "Type*",
-                    options=["restaurant", "cocktail_bar"],
+                new_type = st.selectbox("Type*", options=["restaurant", "cocktail_bar"],
                     format_func=lambda x: "Restaurant 🍽️" if x == "restaurant" else "Cocktail Bar 🍸",
-                    index=0 if r.get("type", "restaurant") == "restaurant" else 1
-                )
+                    index=0 if r.get("type", "restaurant") == "restaurant" else 1)
                 new_visited = st.checkbox("✅ I've already visited this place", value=r.get("visited", False))
 
                 st.write("**Current Photos (check to delete):**")
@@ -345,12 +319,7 @@ if action == "View All Places":
                                 if st.checkbox("Delete this photo", key=f"del_photo_{edit_idx}_{p_idx}"):
                                     photos_to_delete.append(photo_path)
 
-                new_photos = st.file_uploader(
-                    "Add more photos (optional)",
-                    type=["jpg", "jpeg", "png"],
-                    accept_multiple_files=True,
-                    key=f"new_photos_edit_{edit_idx}"
-                )
+                new_photos = st.file_uploader("Add more photos (optional)", type=["jpg", "jpeg", "png"], accept_multiple_files=True, key=f"new_photos_edit_{edit_idx}")
 
                 col_save, col_cancel = st.columns(2)
                 with col_save:
@@ -375,7 +344,6 @@ if action == "View All Places":
                                 os.remove(photo_path)
                             if photo_path in r["photos"]:
                                 r["photos"].remove(photo_path)
-
                         if new_photos:
                             safe_name = "".join(c for c in new_name if c.isalnum() or c in " -_").replace(" ", "_")
                             for photo in new_photos:
@@ -385,7 +353,6 @@ if action == "View All Places":
                                 with open(filepath, "wb") as f:
                                     f.write(photo.getbuffer())
                                 r["photos"].append(filepath)
-
                         r.update({
                             "name": new_name.strip(),
                             "cuisine": new_cuisine,
@@ -402,38 +369,33 @@ if action == "View All Places":
                         st.rerun()
 
 # ========================
-# Add a Place
+# Add a Place / Leave a Review
 # ========================
-elif action == "Add a Place":
-    st.header("Add New Place")
+elif action == "Add a Place / Leave a Review":
+    st.header("Add a New Place")
+
     with st.form("add_place_form"):
+        st.subheader("📍 Add New Place")
         name = st.text_input("Name*", placeholder="e.g., Lou Malnati's")
         cuisine_option = st.selectbox("Cuisine/Style*", options=CUISINES)
-        cuisine = st.text_input("Enter custom cuisine*", placeholder="e.g., Vietnamese") if cuisine_option == "Other" else cuisine_option
+        cuisine = st.text_input("Custom cuisine (if Other)", "") if cuisine_option == "Other" else cuisine_option
         price = st.selectbox("Price Range*", ["$", "$$", "$$$", "$$$$"])
         location_option = st.selectbox("Neighborhood*", options=NEIGHBORHOODS + ["Other"])
-        location = st.text_input("Custom neighborhood*", placeholder="e.g., Logan Square") if location_option == "Other" else location_option
+        location = st.text_input("Custom neighborhood (if Other)", "") if location_option == "Other" else location_option
         address = st.text_input("Address*", placeholder="e.g., 123 N Wacker Dr, Chicago, IL")
-        place_type = st.selectbox(
-            "Type*",
-            options=["restaurant", "cocktail_bar"],
-            format_func=lambda x: "Restaurant 🍽️" if x == "restaurant" else "Cocktail Bar 🍸",
-            index=0
-        )
-        visited = st.checkbox("✅ I've already visited this place", value=False)
-        uploaded_photos = st.file_uploader(
-            "Upload Photos (optional)",
-            type=["jpg", "jpeg", "png"],
-            accept_multiple_files=True
-        )
+        place_type = st.selectbox("Type*", options=["restaurant", "cocktail_bar"],
+                                  format_func=lambda x: "Restaurant 🍽️" if x == "restaurant" else "Cocktail Bar 🍸")
+        visited = st.checkbox("✅ I've already visited this place")
+        uploaded_photos = st.file_uploader("Upload Photos (optional)", type=["jpg", "jpeg", "png"], accept_multiple_files=True)
+
         submitted = st.form_submit_button("Add Place", type="primary")
 
         if submitted:
-            cuisine = cuisine.strip() if cuisine_option == "Other" else cuisine_option
-            location = location.strip() if location_option == "Other" else location_option
-            if not all([name, cuisine, location, address]):
+            cuisine = cuisine.strip() or cuisine_option
+            location = location.strip() or location_option
+            if not all([name.strip(), cuisine, location, address.strip()]):
                 st.error("Please fill in all required fields (*)")
-            elif any(r["name"].lower() == name.lower() for r in restaurants):
+            elif any(r["name"].lower() == name.lower().strip() for r in restaurants):
                 st.warning("This place already exists!")
             else:
                 photo_paths = []
@@ -458,54 +420,45 @@ elif action == "Add a Place":
                     "visited": visited,
                     "photos": photo_paths,
                     "reviews": [],
-                    "added_date": datetime.now().isoformat()  # for reliable "Latest Added" sorting
+                    "added_date": datetime.now().isoformat()
                 })
                 save_data(restaurants)
-                st.success(f"{name} added successfully!")
+                st.success(f"{name.strip()} added successfully!")
                 st.balloons()
                 st.rerun()
 
-# ========================
-# Add a Review
-# ========================
-elif action == "Add a Review":
-    st.header("Leave a Review")
-    if not restaurants:
-        st.info("No places yet — add one first!")
-    else:
-        names = [r["name"] for r in restaurants]
-        selected = st.selectbox("Choose place to review", names)
-        with st.form("add_review_form", clear_on_submit=True):
-            st.write("**Your Rating**")
-            rating = st.radio(
-                "Select your rating",
-                options=[1, 2, 3, 4, 5],
-                format_func=lambda x: "★" * x + "☆" * (5 - x),
-                horizontal=True,
-                label_visibility="collapsed"
-            )
-            comment = st.text_area("Your thoughts*", placeholder="What did you like? Any standout dishes or drinks?")
-            reviewer = st.text_input("Your name (optional)", placeholder="e.g., Alex")
-            submitted = st.form_submit_button("Submit Review", type="primary")
+    st.markdown("---")
 
-            if submitted:
+    st.subheader("✍️ Leave a Review (Optional)")
+
+    if not restaurants:
+        st.info("No places yet — add one above first!")
+    else:
+        selected_place = st.selectbox("Select a place to review", options=[r["name"] for r in restaurants])
+        with st.form("review_form", clear_on_submit=True):
+            rating = st.slider("Your Rating", 1, 5, 3, format="%d ⭐")
+            comment = st.text_area("Your thoughts (optional but appreciated!)", placeholder="Standout dishes? Vibes? Any tips?")
+            reviewer = st.text_input("Your name (optional)", placeholder="e.g., Alex")
+
+            review_submitted = st.form_submit_button("Submit Review", type="primary")
+
+            if review_submitted:
                 if not comment.strip():
-                    st.error("Please write a comment!")
-                else:
-                    review = {
-                        "rating": rating,
-                        "comment": comment.strip(),
-                        "reviewer": reviewer.strip() or "Anonymous",
-                        "date": datetime.now().strftime("%B %d, %Y")
-                    }
-                    for r in restaurants:
-                        if r["name"] == selected:
-                            r["reviews"].append(review)
-                            break
-                    save_data(restaurants)
-                    st.success("Thank you! Review added 🎉")
-                    st.balloons()
-                    st.rerun()
+                    st.warning("A comment helps others — but it's optional!")
+                review = {
+                    "rating": rating,
+                    "comment": comment.strip(),
+                    "reviewer": reviewer.strip() or "Anonymous",
+                    "date": datetime.now().strftime("%B %d, %Y")
+                }
+                for r in restaurants:
+                    if r["name"] == selected_place:
+                        r["reviews"].append(review)
+                        break
+                save_data(restaurants)
+                st.success("Review added — thank you! 🎉")
+                st.balloons()
+                st.rerun()
 
 # ========================
 # Random Pick
@@ -523,16 +476,8 @@ else:  # Random Pick
             cuisine_filter = st.multiselect("Cuisine", options=all_cuisines, default=[])
             all_prices = sorted({r["price"] for r in restaurants}, key=lambda x: len(x))
             price_filter = st.multiselect("Price Range", options=all_prices, default=[])
-            type_filter = st.selectbox(
-                "Type",
-                options=["all", "restaurant", "cocktail_bar"],
-                format_func=lambda x: {
-                    "all": "All Places",
-                    "restaurant": "Only Restaurants 🍽️",
-                    "cocktail_bar": "Only Cocktail Bars 🍸"
-                }[x],
-                index=0
-            )
+            type_filter = st.selectbox("Type", options=["all", "restaurant", "cocktail_bar"],
+                format_func=lambda x: {"all": "All Places", "restaurant": "Only Restaurants 🍽️", "cocktail_bar": "Only Cocktail Bars 🍸"}[x])
             only_favorites = st.checkbox("Only show favorites ❤️")
             visited_filter = st.selectbox("Visited Status", options=VISITED_OPTIONS)
         with col2:
