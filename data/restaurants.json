@@ -1,0 +1,2 @@
+DATA_FILE = "data/restaurants.json"
+IMAGES_DIR = "data/images"
