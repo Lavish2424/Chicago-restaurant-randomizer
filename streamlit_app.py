@@ -29,7 +29,6 @@ def get_or_create_folder(name, parent_id=DRIVE_FOLDER_ID):
     files = results.get('files', [])
     if files:
         return files[0]['id']
-    # Create if not exists
     metadata = {
         'name': name,
         'mimeType': 'application/vnd.google-apps.folder',
@@ -44,7 +43,7 @@ def get_file_id(name, parent_id=DRIVE_FOLDER_ID):
     files = results.get('files', [])
     return files[0]['id'] if files else None
 
-# Ensure main data folder and images subfolder exist
+# Ensure images folder exists
 IMAGES_FOLDER_ID = get_or_create_folder(IMAGES_FOLDER_NAME)
 
 def load_data():
@@ -83,22 +82,28 @@ def save_data(data):
 
 def upload_photo(photo_file):
     """Upload photo to Drive images folder and return direct view link"""
+    photo_file.seek(0)  # Reset pointer - critical fix
+    file_data = photo_file.getvalue()
+    
     file_metadata = {
         'name': f"{uuid.uuid4().hex[:12]}_{photo_file.name}",
         'parents': [IMAGES_FOLDER_ID]
     }
-    media = MediaFileUpload(io.BytesIO(photo_file.getbuffer()), mimetype=photo_file.type)
+    media = MediaFileUpload(io.BytesIO(file_data), mimetype=photo_file.type or 'application/octet-stream')
+    
     file = drive_service.files().create(
         body=file_metadata,
         media_body=media,
         fields='id, webViewLink'
     ).execute()
+    
     file_id = file['id']
     # Make file publicly viewable
     drive_service.permissions().create(
         fileId=file_id,
         body={'type': 'anyone', 'role': 'reader'}
     ).execute()
+    
     return file['webViewLink']
 
 def delete_photo(photo_url):
@@ -107,7 +112,7 @@ def delete_photo(photo_url):
         file_id = photo_url.split('/d/')[1].split('/')[0]
         drive_service.files().delete(fileId=file_id).execute()
     except:
-        pass  # Silent fail if already deleted or invalid
+        pass  # Silent if already gone
 
 # Load data
 if "restaurants" not in st.session_state:
@@ -141,10 +146,8 @@ with st.sidebar.expander("⚙️ Data Management"):
     if st.button("Download backup (JSON + Images)"):
         zip_buffer = BytesIO()
         with zipfile.ZipFile(zip_buffer, "w", zipfile.ZIP_DEFLATED) as zip_file:
-            # Add JSON
             json_bytes = json.dumps(restaurants, indent=4).encode('utf-8')
             zip_file.writestr(DATA_FILE_NAME, json_bytes)
-            # Add images
             for place in restaurants:
                 for url in place.get("photos", []):
                     try:
@@ -156,7 +159,7 @@ with st.sidebar.expander("⚙️ Data Management"):
                         while not done:
                             _, done = downloader.next_chunk()
                         img_io.seek(0)
-                        zip_file.writestr(f"images/{url.split('=')[-1]}", img_io.read())
+                        zip_file.writestr(f"images/{url.split('=')[-1] or file_id}.jpg", img_io.read())
                     except:
                         continue
         zip_buffer.seek(0)
@@ -391,7 +394,11 @@ elif action == "Add a Place":
             elif any(r["name"].lower() == name.lower().strip() for r in restaurants):
                 st.warning("Already exists!")
             else:
-                photo_urls = [upload_photo(p) for p in photos] if photos else []
+                photo_urls = []
+                if photos:
+                    for p in photos:
+                        url = upload_photo(p)
+                        photo_urls.append(url)
 
                 new = {
                     "name": name.strip(),
