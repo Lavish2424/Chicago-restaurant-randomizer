@@ -1,5 +1,4 @@
 import streamlit as st
-import json
 import random
 import urllib.parse
 from datetime import datetime
@@ -11,7 +10,7 @@ supabase_url = st.secrets["SUPABASE_URL"]
 supabase_key = st.secrets["SUPABASE_ANON_KEY"]
 supabase: Client = create_client(supabase_url, supabase_key)
 
-BUCKET_NAME = "restaurant-images"  # Must be public bucket
+BUCKET_NAME = "restaurant-images"  # Make sure this public bucket exists in Supabase
 
 def load_data():
     try:
@@ -33,7 +32,6 @@ def save_data(data):
     try:
         for place in data:
             place_id = place.get("id")
-            # Prepare clean dict without session-specific keys if needed
             update_data = {
                 "name": place["name"],
                 "cuisine": place["cuisine"],
@@ -118,7 +116,10 @@ def upload_images_to_supabase(uploaded_files, restaurant_name):
             supabase.storage.from_(BUCKET_NAME).upload(
                 path=file_path,
                 file=file.getvalue(),
-                file_options={"content-type": file.type, "upsert": True}
+                file_options={
+                    "content-type": file.type,
+                    "upsert": "true"  # Fixed: must be string "true" or "false"
+                }
             )
 
             public_url = supabase.storage.from_(BUCKET_NAME).get_public_url(file_path)
@@ -167,7 +168,6 @@ if action == "View All Places":
             with st.expander(f"{r['name']}{icon}{fav}{visited} • {r['cuisine']} • {r['price']} • {r['location']}{img_count}{notes_count}",
                              expanded=(f"edit_mode_{global_idx}" in st.session_state)):
                 
-                # Display images if any
                 if r.get("images"):
                     cols = st.columns(min(3, len(r["images"])))
                     for img_url, col in zip(r["images"], cols):
@@ -210,7 +210,6 @@ if action == "View All Places":
                     else:
                         st.write("_No notes yet — be the first!_")
                 else:
-                    # EDIT MODE
                     st.subheader(f"Editing: {r['name']}")
                     with st.form(key=f"edit_form_{global_idx}"):
                         new_name = st.text_input("Name*", value=r["name"])
@@ -261,13 +260,11 @@ if action == "View All Places":
                             elif new_name.lower().strip() != r["name"].lower() and any(e["name"].lower() == new_name.lower().strip() for e in restaurants if e != r):
                                 st.warning("Name already exists!")
                             else:
-                                # Handle image uploads
                                 current_images = r.get("images", [])
                                 if new_uploaded:
                                     new_urls = upload_images_to_supabase(new_uploaded, new_name)
                                     current_images.extend(new_urls)
 
-                                # Handle reviews
                                 for i in sorted(reviews_to_delete, reverse=True):
                                     del r["reviews"][i]
                                 if new_rev_comment.strip():
@@ -277,7 +274,6 @@ if action == "View All Places":
                                         "date": datetime.now().strftime("%B %d, %Y")
                                     })
 
-                                # Update place
                                 r.update({
                                     "name": new_name.strip(),
                                     "cuisine": new_cuisine,
@@ -393,7 +389,6 @@ else:
 
                     st.markdown(f"# {c['name']}{tag}{fav}{vis}")
 
-                    # Show images prominently
                     if c.get("images"):
                         for img in c["images"]:
                             st.image(img, use_column_width=True)
