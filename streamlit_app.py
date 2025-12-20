@@ -61,12 +61,19 @@ st.markdown("<p style='text-align: center;'>Add, favorite, and randomly pick Chi
 st.sidebar.header("Actions")
 action = st.sidebar.radio("What do you want to do?", ["View All Places", "Add a Place", "Random Pick (with filters)"])
 
-# Clear last_pick when entering Random tab from another tab
-if action == "Random Pick (with filters)" and st.session_state.last_action != "Random Pick (with filters)":
-    if "last_pick" in st.session_state:
-        del st.session_state.last_pick
+# Detect tab change and clean up
+if action != st.session_state.last_action:
+    # Clear any open edit modes when switching tabs
+    keys_to_delete = [key for key in st.session_state if key.startswith("edit_mode_")]
+    for key in keys_to_delete:
+        del st.session_state[key]
+    
+    # Clear last random pick when entering Random tab (as before)
+    if action == "Random Pick (with filters)":
+        if "last_pick" in st.session_state:
+            del st.session_state.last_pick
 
-# Update last_action for next time
+# Update last_action for next rerun
 st.session_state.last_action = action
 
 st.sidebar.markdown("---")
@@ -429,7 +436,6 @@ else:
                 st.session_state.last_pick = picked
                 st.rerun()
 
-            # Only show last pick if it still matches current filters
             if "last_pick" in st.session_state and st.session_state.last_pick in filtered:
                 c = st.session_state.last_pick
                 with st.container(border=True):
@@ -469,5 +475,3 @@ else:
                         picked = random.choice(filtered)
                         st.session_state.last_pick = picked
                         st.rerun()
-
-# No else needed — the "previous pick no longer matches" message is removed since we auto-clear on tab switch
