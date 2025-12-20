@@ -13,7 +13,7 @@ from googleapiclient.http import MediaFileUpload, MediaIoBaseDownload
 from google.oauth2 import service_account
 
 # ==================== GOOGLE DRIVE SETUP ====================
-DRIVE_FOLDER_ID = st.secrets["DRIVE_FOLDER_ID"]
+DRIVE_FOLDER_ID = st.secrets["https://drive.google.com/drive/folders/1Dx0JfRZuwQWcWy5pQBPYDtCa0SUMffLu"]
 SCOPES = ['https://www.googleapis.com/auth/drive']
 
 credentials = service_account.Credentials.from_service_account_info(
