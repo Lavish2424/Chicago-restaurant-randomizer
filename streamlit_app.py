@@ -120,7 +120,7 @@ def toggle_favorite(place_id):
         place["favorite"] = not place.get("favorite", False)
         save_place(place)
         st.session_state.restaurants = load_data()
-        st.rerun()  # Force rerun to update UI immediately
+        st.rerun()
 
 def toggle_visited(place_id):
     place = next((r for r in restaurants if r.get("id") == place_id), None)
@@ -128,7 +128,7 @@ def toggle_visited(place_id):
         place["visited"] = not place.get("visited", False)
         save_place(place)
         st.session_state.restaurants = load_data()
-        st.rerun()  # Force rerun
+        st.rerun()
 
 def google_maps_link(address, name=""):
     query = f"{name}, {address}" if name else address
@@ -179,35 +179,32 @@ if action == "View All Places":
                         st.write(f"**Address:** {r.get('address', 'Not provided')}")
                         st.markdown(f"[📍 Google Maps]({google_maps_link(r.get('address', ''), r['name'])})")
                     with col2:
-                        st.button("❤️ Unfavorite" if r.get("favorite") else "❤️ Favorite",
-                                  key=f"fav_{place_id}", on_click=toggle_favorite, args=(place_id,))
-                        st.button("✅ Mark as Unvisited" if r.get("visited") else "✅ Mark as Visited",
-                                  key=f"vis_{place_id}", on_click=toggle_visited, args=(place_id,))
+                        if st.button("❤️ Unfavorite" if r.get("favorite") else "❤️ Favorite",
+                                     key=f"fav_{place_id}"):
+                            toggle_favorite(place_id)
+                        if st.button("✅ Mark as Unvisited" if r.get("visited") else "✅ Mark as Visited",
+                                     key=f"vis_{place_id}"):
+                            toggle_visited(place_id)
                         if st.button("Edit ✏️", key=f"edit_{place_id}"):
                             st.session_state[f"edit_mode_{place_id}"] = True
                             st.rerun()
                         if st.button("Delete 🗑️", key=f"del_{place_id}"):
                             delete_place(place_id)
                             st.session_state.restaurants = load_data()
-                            st.success(f"{r['name']} deleted!")
                             st.rerun()
 
-                    if r.get("photos"):
+                    if r.get("photos", []):
                         st.write("**Photos**")
                         cols = st.columns(3)
-                        has_photo = False
                         for i, url in enumerate(r["photos"]):
                             if url:
-                                has_photo = True
                                 try:
                                     response = requests.get(url)
                                     response.raise_for_status()
                                     img_bytes = response.content
                                     cols[i % 3].image(img_bytes, use_column_width=True)
                                 except:
-                                    cols[i % 3].write("Failed to load image")
-                        if not has_photo:
-                            st.info("No photos yet")
+                                    pass  # Silent on load failure
                     else:
                         st.info("No photos yet")
 
@@ -249,7 +246,7 @@ if action == "View All Places":
                         new_rev_comment = st.text_area("Comment", height=80, key=f"new_rev_{place_id}")
 
                         photos_to_delete = []
-                        if r.get("photos"):
+                        if r.get("photos", []):
                             st.write("**Photos (check to delete)**")
                             cols = st.columns(3)
                             for i, url in enumerate(r["photos"]):
@@ -435,28 +432,26 @@ else:
 
                     col_fav, col_vis = st.columns(2)
                     with col_fav:
-                        st.button("❤️ Unfavorite" if c.get("favorite") else "❤️ Favorite",
-                                  key=f"rand_fav_{place_id}", on_click=toggle_favorite, args=(place_id,))
+                        if st.button("❤️ Unfavorite" if c.get("favorite") else "❤️ Favorite",
+                                     key=f"rand_fav_{place_id}"):
+                            toggle_favorite(place_id)
                     with col_vis:
-                        st.button("✅ Mark as Unvisited" if c.get("visited") else "✅ Mark as Visited",
-                                  key=f"rand_vis_{place_id}", on_click=toggle_visited, args=(place_id,))
+                        if st.button("✅ Mark as Unvisited" if c.get("visited") else "✅ Mark as Visited",
+                                     key=f"rand_vis_{place_id}"):
+                            toggle_visited(place_id)
 
-                    if c.get("photos"):
+                    if c.get("photos", []):
                         st.markdown("### Photos")
                         cols = st.columns(3)
-                        has_photo = False
                         for i, url in enumerate(c["photos"]):
                             if url:
-                                has_photo = True
                                 try:
                                     response = requests.get(url)
                                     response.raise_for_status()
                                     img_bytes = response.content
                                     cols[i % 3].image(img_bytes, use_column_width=True)
                                 except:
-                                    cols[i % 3].write("Failed to load image")
-                        if not has_photo:
-                            st.info("No photos yet")
+                                    pass
                     else:
                         st.info("No photos yet")
 
