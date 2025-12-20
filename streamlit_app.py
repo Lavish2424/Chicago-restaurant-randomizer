@@ -38,7 +38,6 @@ def save_place(place):
 
 def delete_place(place_id):
     try:
-        # Delete photos first
         response = supabase.table("restaurants").select("photos").eq("id", place_id).execute()
         if response.data:
             for url in response.data[0].get("photos", []):
@@ -162,7 +161,7 @@ if action == "View All Places":
                             sorted([r for r in filtered if not r.get("favorite")], key=lambda x: x["name"].lower())
 
         for r in sorted_places:
-            place_id = r.get("id", str(uuid.uuid4()))  # Fallback ID if missing
+            place_id = r.get("id", str(uuid.uuid4()))
             icon = " 🍸" if r.get("type") == "cocktail_bar" else " 🍽️"
             fav = " ❤️" if r.get("favorite") else ""
             visited = " ✅" if r.get("visited") else ""
@@ -192,7 +191,8 @@ if action == "View All Places":
                         st.write("**Photos**")
                         cols = st.columns(3)
                         for i, url in enumerate(r["photos"]):
-                            cols[i % 3].image(url, use_column_width=True)
+                            if url:  # Safety check
+                                cols[i % 3].image(url, use_column_width=True)
 
                     if r["reviews"]:
                         st.write("**Notes**")
@@ -236,10 +236,11 @@ if action == "View All Places":
                             st.write("**Photos (check to delete)**")
                             cols = st.columns(3)
                             for i, url in enumerate(r["photos"]):
-                                with cols[i % 3]:
-                                    st.image(url, use_column_width=True)
-                                    if st.checkbox("Delete", key=f"del_ph_{place_id}_{i}"):
-                                        photos_to_delete.append(url)
+                                if url:
+                                    with cols[i % 3]:
+                                        st.image(url, use_column_width=True)
+                                        if st.checkbox("Delete", key=f"del_ph_{place_id}_{i}"):
+                                            photos_to_delete.append(url)
 
                         new_photos = st.file_uploader("Add photos", type=["jpg","jpeg","png"], accept_multiple_files=True, key=f"new_ph_{place_id}")
 
@@ -259,7 +260,6 @@ if action == "View All Places":
                             elif new_name.lower().strip() != r["name"].lower() and any(e["name"].lower() == new_name.lower().strip() for e in restaurants if e.get("id") != place_id):
                                 st.warning("Name already exists!")
                             else:
-                                # Delete selected photos
                                 for url in photos_to_delete:
                                     try:
                                         file_name = url.split("/")[-1].split("?")[0]
@@ -269,11 +269,9 @@ if action == "View All Places":
                                     if url in r["photos"]:
                                         r["photos"].remove(url)
 
-                                # Delete selected reviews
                                 for i in sorted(reviews_to_delete, reverse=True):
                                     del r["reviews"][i]
 
-                                # Add new review
                                 if new_rev_comment.strip():
                                     r["reviews"].append({
                                         "comment": new_rev_comment.strip(),
@@ -281,7 +279,6 @@ if action == "View All Places":
                                         "date": datetime.now().strftime("%B %d, %Y")
                                     })
 
-                                # Add new photos
                                 new_photo_urls = []
                                 if new_photos:
                                     for p in new_photos:
@@ -290,7 +287,6 @@ if action == "View All Places":
                                             new_photo_urls.append(url)
                                 r["photos"].extend(new_photo_urls)
 
-                                # Update fields
                                 r.update({
                                     "name": new_name.strip(),
                                     "cuisine": new_cuisine,
@@ -427,7 +423,8 @@ else:
                         st.markdown("### Photos")
                         cols = st.columns(3)
                         for i, url in enumerate(c["photos"]):
-                            cols[i % 3].image(url, use_column_width=True)
+                            if url:
+                                cols[i % 3].image(url, use_column_width=True)
 
                     if c["reviews"]:
                         st.markdown("### Notes")
