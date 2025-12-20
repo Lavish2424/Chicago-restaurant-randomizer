@@ -2,18 +2,13 @@ import streamlit as st
 import json
 import random
 import urllib.parse
-import uuid
 from datetime import datetime
-import zipfile
-from io import BytesIO
-import requests
 from supabase import create_client, Client
 
 # ==================== SUPABASE SETUP ====================
 supabase_url = st.secrets["SUPABASE_URL"]
 supabase_key = st.secrets["SUPABASE_ANON_KEY"]
 supabase: Client = create_client(supabase_url, supabase_key)
-STORAGE_BUCKET = "images"  # Must be a PUBLIC bucket in Supabase
 
 def load_data():
     try:
@@ -22,7 +17,6 @@ def load_data():
         for place in data:
             place.setdefault("favorite", False)
             place.setdefault("visited", False)
-            place.setdefault("photos", [])
             place.setdefault("reviews", [])
             if "added_date" not in place:
                 place["added_date"] = datetime.now().isoformat()
@@ -42,57 +36,6 @@ def save_data(data):
     except Exception as e:
         st.error(f"Error saving data: {str(e)}")
 
-def upload_photo(photo_file):
-    try:
-        photo_file.seek(0)
-        file_bytes = photo_file.getvalue()
-        file_name = f"{uuid.uuid4().hex[:12]}_{photo_file.name}"
-
-        # Always guess content-type from file extension (safest and most reliable)
-        ext = photo_file.name.lower().split(".")[-1] if "." in photo_file.name else ""
-        mime_map = {
-            "jpg": "image/jpeg",
-            "jpeg": "image/jpeg",
-            "png": "image/png",
-            "gif": "image/gif",
-            "webp": "image/webp",
-        }
-        content_type = mime_map.get(ext, "application/octet-stream")
-
-        supabase.storage.from_(STORAGE_BUCKET).upload(
-            path=file_name,
-            file=file_bytes,
-            file_options={
-                "content-type": content_type,
-                "upsert": True
-            }
-        )
-        return supabase.storage.from_(STORAGE_BUCKET).get_public_url(file_name)
-    except Exception as e:
-        st.error(f"Photo upload failed: {str(e)}")
-        return None
-
-def delete_photo(photo_url):
-    if not photo_url:
-        return False
-    try:
-        parsed = urllib.parse.urlparse(photo_url)
-        path_parts = parsed.path.split(f"/object/public/{STORAGE_BUCKET}/")
-        if len(path_parts) < 2:
-            st.warning("Invalid photo URL format")
-            return False
-        file_name = path_parts[1].split("?")[0]
-        if not file_name:
-            return False
-        result = supabase.storage.from_(STORAGE_BUCKET).remove([file_name])
-        if result.error:
-            st.error(f"Storage delete failed: {result.error.message}")
-            return False
-        return True
-    except Exception as e:
-        st.error(f"Photo delete error: {str(e)}")
-        return False
-
 # Load data into session state
 if "restaurants" not in st.session_state:
     st.session_state.restaurants = load_data()
@@ -106,29 +49,6 @@ st.sidebar.header("Actions")
 action = st.sidebar.radio("What do you want to do?", ["View All Places", "Add a Place", "Random Pick (with filters)"])
 
 st.sidebar.markdown("---")
-
-with st.sidebar.expander("⚙️ Data Management"):
-    if st.button("Download backup (JSON + Images)"):
-        zip_buffer = BytesIO()
-        with zipfile.ZipFile(zip_buffer, "w", zipfile.ZIP_DEFLATED) as zip_file:
-            json_bytes = json.dumps(restaurants, indent=4).encode('utf-8')
-            zip_file.writestr("restaurants.json", json_bytes)
-            for place in restaurants:
-                for url in place.get("photos", []):
-                    try:
-                        response = requests.get(url, timeout=10)
-                        response.raise_for_status()
-                        file_name = url.split("/")[-1].split("?")[0]
-                        zip_file.writestr(f"images/{file_name}", response.content)
-                    except:
-                        pass
-        zip_buffer.seek(0)
-        st.download_button(
-            "📥 Download full backup (ZIP)",
-            zip_buffer.getvalue(),
-            f"chicago_restaurants_backup_{datetime.now().strftime('%Y%m%d_%H%M')}.zip",
-            "application/zip"
-        )
 
 st.sidebar.caption("Built by Alan, made for us ❤️")
 
@@ -147,8 +67,6 @@ VISITED_OPTIONS = ["All", "Visited Only", "Not Visited Yet"]
 
 def delete_restaurant(index):
     r = restaurants[index]
-    for url in r.get("photos", []):
-        delete_photo(url)
     if "id" in r:
         supabase.table("restaurants").delete().eq("id", r["id"]).execute()
     del restaurants[index]
@@ -239,19 +157,6 @@ if action == "View All Places":
                                 st.session_state[delete_key] = True
                                 st.rerun()
 
-                    if r.get("photos"):
-                        st.write("**Photos**")
-                        cols = st.columns(3)
-                        for i, url in enumerate(r["photos"]):
-                            if url:
-                                with cols[i % 3]:
-                                    try:
-                                        response = requests.get(url, timeout=10)
-                                        response.raise_for_status()
-                                        st.image(response.content, use_column_width=True)
-                                    except:
-                                        st.write("Failed to load image")
-
                     if r["reviews"]:
                         st.write("**Notes**")
                         for rev in reversed(r["reviews"]):
@@ -288,24 +193,6 @@ if action == "View All Places":
                         st.write("Add new note (optional)")
                         new_rev_comment = st.text_area("Comment", height=80, key=f"new_rev_{global_idx}")
 
-                        st.write("**Photos (check to delete)**")
-                        photos_to_delete = []
-                        if r.get("photos"):
-                            cols = st.columns(3)
-                            for i, url in enumerate(r["photos"]):
-                                if url:
-                                    with cols[i % 3]:
-                                        try:
-                                            response = requests.get(url, timeout=10)
-                                            response.raise_for_status()
-                                            st.image(response.content, use_column_width=True)
-                                        except:
-                                            st.write("Failed to load preview")
-                                        if st.checkbox("Delete", key=f"del_ph_{global_idx}_{i}"):
-                                            photos_to_delete.append(url)
-
-                        new_photos = st.file_uploader("Add photos", type=["jpg","jpeg","png"], accept_multiple_files=True, key=f"new_ph_{global_idx}")
-
                         col_save, col_cancel = st.columns(2)
                         with col_save:
                             save_btn = st.form_submit_button("Save Changes", type="primary")
@@ -322,11 +209,6 @@ if action == "View All Places":
                             elif new_name.lower().strip() != r["name"].lower() and any(e["name"].lower() == new_name.lower().strip() for e in restaurants if e != r):
                                 st.warning("Name already exists!")
                             else:
-                                for url in photos_to_delete:
-                                    delete_photo(url)
-                                    if url in r["photos"]:
-                                        r["photos"].remove(url)
-
                                 for i in sorted(reviews_to_delete, reverse=True):
                                     del r["reviews"][i]
 
@@ -336,14 +218,6 @@ if action == "View All Places":
                                         "reviewer": "You",
                                         "date": datetime.now().strftime("%B %d, %Y")
                                     })
-
-                                new_photo_urls = []
-                                if new_photos:
-                                    for photo in new_photos:
-                                        url = upload_photo(photo)
-                                        if url:
-                                            new_photo_urls.append(url)
-                                r["photos"].extend(new_photo_urls)
 
                                 r.update({
                                     "name": new_name.strip(),
@@ -374,7 +248,6 @@ elif action == "Add a Place":
                                   format_func=lambda x: "Restaurant 🍽️" if x=="restaurant" else "Cocktail Bar 🍸")
         visited = st.checkbox("✅ I've already visited")
         quick_notes = st.text_area("Quick notes (optional)", height=100)
-        photos = st.file_uploader("Photos (optional)", type=["jpg","jpeg","png"], accept_multiple_files=True)
 
         if st.form_submit_button("Add Place", type="primary"):
             if not all([name.strip(), address.strip()]):
@@ -382,13 +255,6 @@ elif action == "Add a Place":
             elif any(r["name"].lower() == name.lower().strip() for r in restaurants):
                 st.warning("Already exists!")
             else:
-                photo_urls = []
-                if photos:
-                    for p in photos:
-                        url = upload_photo(p)
-                        if url:
-                            photo_urls.append(url)
-
                 new = {
                     "name": name.strip(),
                     "cuisine": cuisine,
@@ -398,7 +264,6 @@ elif action == "Add a Place":
                     "type": place_type,
                     "favorite": False,
                     "visited": visited,
-                    "photos": photo_urls,
                     "reviews": [],
                     "added_date": datetime.now().isoformat()
                 }
@@ -475,19 +340,6 @@ else:
                         if st.button("✅ Mark as Unvisited" if c.get("visited") else "✅ Mark as Visited",
                                      key=f"rand_vis_{idx}"):
                             toggle_visited(idx)
-
-                    if c.get("photos"):
-                        st.markdown("### Photos")
-                        cols = st.columns(3)
-                        for i, url in enumerate(c["photos"]):
-                            if url:
-                                with cols[i % 3]:
-                                    try:
-                                        response = requests.get(url, timeout=10)
-                                        response.raise_for_status()
-                                        st.image(response.content, use_column_width=True)
-                                    except:
-                                        st.write("Failed to load image")
 
                     if c["reviews"]:
                         st.markdown("### Notes")
