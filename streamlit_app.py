@@ -173,7 +173,7 @@ with st.sidebar.expander("⚙️ Data Management"):
 st.sidebar.caption("Built by Alan, made for us ❤️")
 
 NEIGHBORHOODS = ["Fulton Market", "River North", "Gold Coast", "South Loop", "Chinatown", "Pilsen", "West Town", "West Loop"]
-CUISINES = ["Chinese", "Italian", "American", "Mexican", "Japanese", "Indian", "Thai", "French", "Korean", "Pizza", "Burgers", "Seafood", "Steakhouse", "Bar Food", "Cocktails", "Other"]
+CUISINES = ["Chinese", "Italian", "American", "Mexican", "Japanese", "Indian", "Thai", "French", "Korean", "Asian", "Seafood", "Steakhouse", "Other"]
 VISITED_OPTIONS = ["All", "Visited Only", "Not Visited Yet"]
 
 def toggle_favorite(idx):
