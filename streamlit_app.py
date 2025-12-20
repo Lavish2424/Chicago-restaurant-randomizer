@@ -9,7 +9,7 @@ from io import BytesIO
 import io
 
 from googleapiclient.discovery import build
-from googleapiclient.http import MediaFileUpload, MediaIoBaseDownload
+from googleapiclient.http import MediaFileUpload, MediaIoBaseDownload, MediaIoBaseUpload
 from google.oauth2 import service_account
 
 # ==================== GOOGLE DRIVE SETUP ====================
@@ -82,14 +82,17 @@ def save_data(data):
 
 def upload_photo(photo_file):
     """Upload photo to Drive images folder and return direct view link"""
-    photo_file.seek(0)  # Reset pointer - critical fix
+    photo_file.seek(0)  # Reset pointer
     file_data = photo_file.getvalue()
     
     file_metadata = {
         'name': f"{uuid.uuid4().hex[:12]}_{photo_file.name}",
         'parents': [IMAGES_FOLDER_ID]
     }
-    media = MediaFileUpload(io.BytesIO(file_data), mimetype=photo_file.type or 'application/octet-stream')
+    
+    # Use MediaIoBaseUpload to avoid filename path issues
+    media = MediaIoBaseUpload(io.BytesIO(file_data), 
+                              mimetype=photo_file.type or 'application/octet-stream')
     
     file = drive_service.files().create(
         body=file_metadata,
@@ -98,7 +101,7 @@ def upload_photo(photo_file):
     ).execute()
     
     file_id = file['id']
-    # Make file publicly viewable
+    # Make publicly viewable
     drive_service.permissions().create(
         fileId=file_id,
         body={'type': 'anyone', 'role': 'reader'}
@@ -173,7 +176,7 @@ with st.sidebar.expander("⚙️ Data Management"):
 st.sidebar.caption("Built by Alan, made for us ❤️")
 
 NEIGHBORHOODS = ["Fulton Market", "River North", "Gold Coast", "South Loop", "Chinatown", "Pilsen", "West Town", "West Loop"]
-CUISINES = ["Chinese", "Italian", "American", "Mexican", "Japanese", "Indian", "Thai", "French", "Korean", "Asian", "Seafood", "Steakhouse", "Other"]
+CUISINES = ["Chinese", "Italian", "American", "Mexican", "Japanese", "Indian", "Thai", "French", "Korean", "Pizza", "Burgers", "Seafood", "Steakhouse", "Bar Food", "Cocktails", "Other"]
 VISITED_OPTIONS = ["All", "Visited Only", "Not Visited Yet"]
 
 def toggle_favorite(idx):
