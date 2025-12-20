@@ -120,6 +120,7 @@ def toggle_favorite(place_id):
         place["favorite"] = not place.get("favorite", False)
         save_place(place)
         st.session_state.restaurants = load_data()
+        st.rerun()  # Force rerun to update UI immediately
 
 def toggle_visited(place_id):
     place = next((r for r in restaurants if r.get("id") == place_id), None)
@@ -127,6 +128,7 @@ def toggle_visited(place_id):
         place["visited"] = not place.get("visited", False)
         save_place(place)
         st.session_state.restaurants = load_data()
+        st.rerun()  # Force rerun
 
 def google_maps_link(address, name=""):
     query = f"{name}, {address}" if name else address
@@ -179,6 +181,8 @@ if action == "View All Places":
                     with col2:
                         st.button("❤️ Unfavorite" if r.get("favorite") else "❤️ Favorite",
                                   key=f"fav_{place_id}", on_click=toggle_favorite, args=(place_id,))
+                        st.button("✅ Mark as Unvisited" if r.get("visited") else "✅ Mark as Visited",
+                                  key=f"vis_{place_id}", on_click=toggle_visited, args=(place_id,))
                         if st.button("Edit ✏️", key=f"edit_{place_id}"):
                             st.session_state[f"edit_mode_{place_id}"] = True
                             st.rerun()
@@ -191,15 +195,21 @@ if action == "View All Places":
                     if r.get("photos"):
                         st.write("**Photos**")
                         cols = st.columns(3)
+                        has_photo = False
                         for i, url in enumerate(r["photos"]):
                             if url:
+                                has_photo = True
                                 try:
                                     response = requests.get(url)
                                     response.raise_for_status()
                                     img_bytes = response.content
                                     cols[i % 3].image(img_bytes, use_column_width=True)
                                 except:
-                                    cols[i % 3].error("Failed to load image")
+                                    cols[i % 3].write("Failed to load image")
+                        if not has_photo:
+                            st.info("No photos yet")
+                    else:
+                        st.info("No photos yet")
 
                     if r["reviews"]:
                         st.write("**Notes**")
@@ -250,7 +260,7 @@ if action == "View All Places":
                                             response.raise_for_status()
                                             st.image(response.content, use_column_width=True)
                                         except:
-                                            st.error("Failed to load preview")
+                                            st.write("Failed to load preview")
                                         if st.checkbox("Delete", key=f"del_ph_{place_id}_{i}"):
                                             photos_to_delete.append(url)
 
@@ -434,15 +444,21 @@ else:
                     if c.get("photos"):
                         st.markdown("### Photos")
                         cols = st.columns(3)
+                        has_photo = False
                         for i, url in enumerate(c["photos"]):
                             if url:
+                                has_photo = True
                                 try:
                                     response = requests.get(url)
                                     response.raise_for_status()
                                     img_bytes = response.content
                                     cols[i % 3].image(img_bytes, use_column_width=True)
                                 except:
-                                    cols[i % 3].error("Failed to load image")
+                                    cols[i % 3].write("Failed to load image")
+                        if not has_photo:
+                            st.info("No photos yet")
+                    else:
+                        st.info("No photos yet")
 
                     if c["reviews"]:
                         st.markdown("### Notes")
