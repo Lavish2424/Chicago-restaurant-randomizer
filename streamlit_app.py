@@ -45,6 +45,7 @@ def get_file_id(name, parent_id=DRIVE_FOLDER_ID):
 
 # Ensure images folder exists
 IMAGES_FOLDER_ID = get_or_create_folder(IMAGES_FOLDER_NAME)
+folder = drive_service.files().create(body=metadata, fields='id', supportsAllDrives=True).execute()
 
 def load_data():
     file_id = get_file_id(DATA_FILE_NAME)
@@ -97,7 +98,8 @@ def upload_photo(photo_file):
     file = drive_service.files().create(
         body=file_metadata,
         media_body=media,
-        fields='id, webViewLink'
+        fields='id, webViewLink',
+        supportsAllDrives=True
     ).execute()
     
     file_id = file['id']
