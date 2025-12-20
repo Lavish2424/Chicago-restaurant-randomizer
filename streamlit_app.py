@@ -14,7 +14,7 @@ os.makedirs(IMAGES_DIR, exist_ok=True)
 
 NEIGHBORHOODS = [
     "Fulton Market", "River North", "Gold Coast", "South Loop",
-    "Chinatown", "Pilsen", "West Town", "West Loop"  # Added West Loop
+    "Chinatown", "Pilsen", "West Town", "West Loop"
 ]
 
 CUISINES = [
@@ -144,6 +144,20 @@ def google_maps_link(address, name=""):
 # ────────────────────────────── View All Places ──────────────────────────────
 if action == "View All Places":
     st.header("All Places")
+    
+    # Icon Legend
+    st.markdown("### Icon Key")
+    col1, col2, col3, col4 = st.columns(4)
+    with col1:
+        st.markdown("🍽️ **Restaurant**")
+    with col2:
+        st.markdown("🍸 **Cocktail Bar**")
+    with col3:
+        st.markdown("❤️ **Favorite**")
+    with col4:
+        st.markdown("✅ **Visited**")
+    st.markdown("---")
+    
     st.caption(f"{len(restaurants)} place(s)")
 
     if not restaurants:
