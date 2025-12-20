@@ -51,11 +51,23 @@ if "restaurants" not in st.session_state:
 
 restaurants = st.session_state.restaurants
 
+# Track the last viewed tab to detect changes
+if "last_action" not in st.session_state:
+    st.session_state.last_action = None
+
 st.markdown("<h1 style='text-align: center;'>🍽️ Chicago Restaurant/Bar Randomizer</h1>", unsafe_allow_html=True)
 st.markdown("<p style='text-align: center;'>Add, favorite, and randomly pick Chicago eats & drinks! 🍸</p>", unsafe_allow_html=True)
 
 st.sidebar.header("Actions")
 action = st.sidebar.radio("What do you want to do?", ["View All Places", "Add a Place", "Random Pick (with filters)"])
+
+# Clear last_pick when entering Random tab from another tab
+if action == "Random Pick (with filters)" and st.session_state.last_action != "Random Pick (with filters)":
+    if "last_pick" in st.session_state:
+        del st.session_state.last_pick
+
+# Update last_action for next time
+st.session_state.last_action = action
 
 st.sidebar.markdown("---")
 
@@ -88,14 +100,12 @@ with st.sidebar.expander("⚙️ Data Management"):
         try:
             if uploaded_backup.type == "application/zip" or uploaded_backup.name.endswith(".zip"):
                 with zipfile.ZipFile(uploaded_backup, "r") as zip_file:
-                    # Restore JSON
                     for name in zip_file.namelist():
                         if os.path.basename(name) == os.path.basename(DATA_FILE):
                             data = json.loads(zip_file.read(name))
                             save_data(data)
                             st.session_state.restaurants = data
                             break
-                    # Restore images with proper relative paths
                     for name in zip_file.namelist():
                         if name.startswith("images/") or name.startswith(IMAGES_DIR + "/"):
                             if name.startswith("images/"):
@@ -144,20 +154,6 @@ def google_maps_link(address, name=""):
 # ────────────────────────────── View All Places ──────────────────────────────
 if action == "View All Places":
     st.header("All Places")
-    
-    # Icon Legend
-    st.markdown("### Icon Key")
-    col1, col2, col3, col4 = st.columns(4)
-    with col1:
-        st.markdown("🍽️ **Restaurant**")
-    with col2:
-        st.markdown("🍸 **Cocktail Bar**")
-    with col3:
-        st.markdown("❤️ **Favorite**")
-    with col4:
-        st.markdown("✅ **Visited**")
-    st.markdown("---")
-    
     st.caption(f"{len(restaurants)} place(s)")
 
     if not restaurants:
@@ -249,7 +245,6 @@ if action == "View All Places":
                                                 index=0 if r.get("type")=="restaurant" else 1)
                         new_visited = st.checkbox("✅ I've already visited", value=r.get("visited", False))
 
-                        # Editable Added Date
                         current_date = datetime.fromisoformat(r["added_date"]).date()
                         new_added_date = st.date_input("Date Added", value=current_date)
 
@@ -296,18 +291,15 @@ if action == "View All Places":
                             elif new_name.lower().strip() != r["name"].lower() and any(e["name"].lower() == new_name.lower().strip() for e in restaurants if e != r):
                                 st.warning("A place with this name already exists!")
                             else:
-                                # Delete selected photos
                                 for p in photos_to_delete:
                                     if os.path.exists(p):
                                         os.remove(p)
                                     if p in r["photos"]:
                                         r["photos"].remove(p)
 
-                                # Delete selected reviews
                                 for i in sorted(reviews_to_delete, reverse=True):
                                     del r["reviews"][i]
 
-                                # Add new review
                                 if new_rev_comment.strip():
                                     r["reviews"].append({
                                         "comment": new_rev_comment.strip(),
@@ -315,7 +307,6 @@ if action == "View All Places":
                                         "date": datetime.now().strftime("%B %d, %Y")
                                     })
 
-                                # Add new photos
                                 if new_photos:
                                     safe = "".join(c for c in new_name if c.isalnum() or c in " -_").replace(" ", "_")
                                     for photo in new_photos:
@@ -326,7 +317,6 @@ if action == "View All Places":
                                             f.write(photo.getbuffer())
                                         r["photos"].append(path)
 
-                                # Update fields
                                 r.update({
                                     "name": new_name.strip(),
                                     "cuisine": new_cuisine,
@@ -439,6 +429,7 @@ else:
                 st.session_state.last_pick = picked
                 st.rerun()
 
+            # Only show last pick if it still matches current filters
             if "last_pick" in st.session_state and st.session_state.last_pick in filtered:
                 c = st.session_state.last_pick
                 with st.container(border=True):
@@ -478,8 +469,5 @@ else:
                         picked = random.choice(filtered)
                         st.session_state.last_pick = picked
                         st.rerun()
-            elif "last_pick" in st.session_state:
-                st.info("Previous pick no longer matches current filters — pick again!")
-                if st.button("Clear previous pick"):
-                    del st.session_state.last_pick
-                    st.rerun()
+
+# No else needed — the "previous pick no longer matches" message is removed since we auto-clear on tab switch
