@@ -6,65 +6,108 @@ import uuid
 from datetime import datetime, date
 import zipfile
 from io import BytesIO
-import requests
+import io
 
-from supabase import create_client, Client
+from googleapiclient.discovery import build
+from googleapiclient.http import MediaFileUpload, MediaIoBaseDownload
+from google.oauth2 import service_account
 
-# ==================== SUPABASE SETUP ====================
-supabase_url = st.secrets["SUPABASE_URL"]
-supabase_key = st.secrets["SUPABASE_ANON_KEY"]
-supabase: Client = create_client(supabase_url, supabase_key)
+# ==================== GOOGLE DRIVE SETUP ====================
+DRIVE_FOLDER_ID = st.secrets["DRIVE_FOLDER_ID"]
+SCOPES = ['https://www.googleapis.com/auth/drive']
 
-STORAGE_BUCKET = "images"  # Your public bucket name
+credentials = service_account.Credentials.from_service_account_info(
+    st.secrets["gdrive"], scopes=SCOPES)
+drive_service = build('drive', 'v3', credentials=credentials)
+
+DATA_FILE_NAME = "restaurants.json"
+IMAGES_FOLDER_NAME = "images"
+
+def get_or_create_folder(name, parent_id=DRIVE_FOLDER_ID):
+    query = f"name='{name}' and mimeType='application/vnd.google-apps.folder' and '{parent_id}' in parents and trashed=false"
+    results = drive_service.files().list(q=query, fields="files(id)").execute()
+    files = results.get('files', [])
+    if files:
+        return files[0]['id']
+    # Create if not exists
+    metadata = {
+        'name': name,
+        'mimeType': 'application/vnd.google-apps.folder',
+        'parents': [parent_id]
+    }
+    folder = drive_service.files().create(body=metadata, fields='id').execute()
+    return folder.get('id')
+
+def get_file_id(name, parent_id=DRIVE_FOLDER_ID):
+    query = f"name='{name}' and '{parent_id}' in parents and trashed=false"
+    results = drive_service.files().list(q=query, fields="files(id)").execute()
+    files = results.get('files', [])
+    return files[0]['id'] if files else None
+
+# Ensure main data folder and images subfolder exist
+IMAGES_FOLDER_ID = get_or_create_folder(IMAGES_FOLDER_NAME)
 
 def load_data():
+    file_id = get_file_id(DATA_FILE_NAME)
+    if not file_id:
+        return []
+    request = drive_service.files().get_media(fileId=file_id)
+    file_io = io.BytesIO()
+    downloader = MediaIoBaseDownload(file_io, request)
+    done = False
+    while not done:
+        status, done = downloader.next_chunk()
+    file_io.seek(0)
     try:
-        response = supabase.table("restaurants").select("*").order("added_date", desc=True).execute()
-        data = response.data
+        data = json.load(file_io)
         for place in data:
             place.setdefault("favorite", False)
             place.setdefault("visited", False)
             place.setdefault("photos", [])
             place.setdefault("reviews", [])
+            place.setdefault("added_date", datetime.now().isoformat())
         return data
-    except Exception as e:
-        st.error(f"Error loading data: {str(e)}")
+    except json.JSONDecodeError:
+        st.error("Corrupted data file on Drive. Starting fresh.")
         return []
 
-def save_place(place):
-    try:
-        supabase.table("restaurants").upsert(place).execute()
-    except Exception as e:
-        st.error(f"Error saving place: {str(e)}")
-
-def delete_place(place_id):
-    try:
-        response = supabase.table("restaurants").select("photos").eq("id", place_id).execute()
-        if response.data:
-            for url in response.data[0].get("photos", []):
-                try:
-                    file_name = url.split("/")[-1].split("?")[0]
-                    supabase.storage.from_(STORAGE_BUCKET).remove([file_name])
-                except:
-                    pass
-        supabase.table("restaurants").delete().eq("id", place_id).execute()
-    except Exception as e:
-        st.error(f"Error deleting place: {str(e)}")
+def save_data(data):
+    content = json.dumps(data, indent=4).encode('utf-8')
+    media = MediaFileUpload(io.BytesIO(content), mimetype='application/json')
+    file_id = get_file_id(DATA_FILE_NAME)
+    if file_id:
+        drive_service.files().update(fileId=file_id, media_body=media).execute()
+    else:
+        metadata = {'name': DATA_FILE_NAME, 'parents': [DRIVE_FOLDER_ID]}
+        drive_service.files().create(body=metadata, media_body=media, fields='id').execute()
 
 def upload_photo(photo_file):
+    """Upload photo to Drive images folder and return direct view link"""
+    file_metadata = {
+        'name': f"{uuid.uuid4().hex[:12]}_{photo_file.name}",
+        'parents': [IMAGES_FOLDER_ID]
+    }
+    media = MediaFileUpload(io.BytesIO(photo_file.getbuffer()), mimetype=photo_file.type)
+    file = drive_service.files().create(
+        body=file_metadata,
+        media_body=media,
+        fields='id, webViewLink'
+    ).execute()
+    file_id = file['id']
+    # Make file publicly viewable
+    drive_service.permissions().create(
+        fileId=file_id,
+        body={'type': 'anyone', 'role': 'reader'}
+    ).execute()
+    return file['webViewLink']
+
+def delete_photo(photo_url):
+    """Delete photo from Drive using its webViewLink"""
     try:
-        photo_file.seek(0)
-        file_bytes = photo_file.getvalue()
-        file_name = f"{uuid.uuid4().hex[:12]}_{photo_file.name}"
-        supabase.storage.from_(STORAGE_BUCKET).upload(
-            path=file_name,
-            file=file_bytes,
-            file_options={"content-type": photo_file.type or "application/octet-stream", "upsert": True}
-        )
-        return supabase.storage.from_(STORAGE_BUCKET).get_public_url(file_name)
-    except Exception as e:
-        st.error(f"Photo upload failed: {str(e)}")
-        return None
+        file_id = photo_url.split('/d/')[1].split('/')[0]
+        drive_service.files().delete(fileId=file_id).execute()
+    except:
+        pass  # Silent fail if already deleted or invalid
 
 # Load data
 if "restaurants" not in st.session_state:
@@ -95,14 +138,30 @@ st.session_state.last_action = action
 st.sidebar.markdown("---")
 
 with st.sidebar.expander("⚙️ Data Management"):
-    if st.button("Download backup (JSON only)"):
+    if st.button("Download backup (JSON + Images)"):
         zip_buffer = BytesIO()
         with zipfile.ZipFile(zip_buffer, "w", zipfile.ZIP_DEFLATED) as zip_file:
+            # Add JSON
             json_bytes = json.dumps(restaurants, indent=4).encode('utf-8')
-            zip_file.writestr("restaurants.json", json_bytes)
+            zip_file.writestr(DATA_FILE_NAME, json_bytes)
+            # Add images
+            for place in restaurants:
+                for url in place.get("photos", []):
+                    try:
+                        file_id = url.split('/d/')[1].split('/')[0]
+                        request = drive_service.files().get_media(fileId=file_id)
+                        img_io = BytesIO()
+                        downloader = MediaIoBaseDownload(img_io, request)
+                        done = False
+                        while not done:
+                            _, done = downloader.next_chunk()
+                        img_io.seek(0)
+                        zip_file.writestr(f"images/{url.split('=')[-1]}", img_io.read())
+                    except:
+                        continue
         zip_buffer.seek(0)
         st.download_button(
-            "📥 Download JSON backup",
+            "📥 Download full backup (ZIP)",
             zip_buffer,
             f"chicago_restaurants_backup_{datetime.now().strftime('%Y%m%d_%H%M')}.zip",
             "application/zip"
@@ -114,25 +173,26 @@ NEIGHBORHOODS = ["Fulton Market", "River North", "Gold Coast", "South Loop", "Ch
 CUISINES = ["Chinese", "Italian", "American", "Mexican", "Japanese", "Indian", "Thai", "French", "Korean", "Pizza", "Burgers", "Seafood", "Steakhouse", "Bar Food", "Cocktails", "Other"]
 VISITED_OPTIONS = ["All", "Visited Only", "Not Visited Yet"]
 
-def toggle_favorite(place_id):
-    place = next((r for r in restaurants if r.get("id") == place_id), None)
-    if place:
-        place["favorite"] = not place.get("favorite", False)
-        save_place(place)
-        st.session_state.restaurants = load_data()
-        st.rerun()
+def toggle_favorite(idx):
+    restaurants[idx]["favorite"] = not restaurants[idx].get("favorite", False)
+    save_data(restaurants)
 
-def toggle_visited(place_id):
-    place = next((r for r in restaurants if r.get("id") == place_id), None)
-    if place:
-        place["visited"] = not place.get("visited", False)
-        save_place(place)
-        st.session_state.restaurants = load_data()
-        st.rerun()
+def toggle_visited(idx):
+    restaurants[idx]["visited"] = not restaurants[idx].get("visited", False)
+    save_data(restaurants)
 
 def google_maps_link(address, name=""):
     query = f"{name}, {address}" if name else address
     return f"https://www.google.com/maps/search/?api=1&query={urllib.parse.quote(query)}"
+
+def delete_restaurant(index):
+    r = restaurants[index]
+    for url in r.get("photos", []):
+        delete_photo(url)
+    del restaurants[index]
+    save_data(restaurants)
+    st.success(f"{r['name']} has been deleted.")
+    st.rerun()
 
 # ==================== View All Places ====================
 if action == "View All Places":
@@ -163,50 +223,47 @@ if action == "View All Places":
             sorted_places = sorted([r for r in filtered if r.get("favorite")], key=lambda x: x["name"].lower()) + \
                             sorted([r for r in filtered if not r.get("favorite")], key=lambda x: x["name"].lower())
 
-        for r in sorted_places:
-            place_id = r.get("id", str(uuid.uuid4()))
+        for idx, r in enumerate(sorted_places):
+            global_idx = restaurants.index(r)
             icon = " 🍸" if r.get("type") == "cocktail_bar" else " 🍽️"
             fav = " ❤️" if r.get("favorite") else ""
             visited = " ✅" if r.get("visited") else ""
             notes_count = f" • {len(r['reviews'])} note{'s' if len(r['reviews']) != 1 else ''}" if r["reviews"] else ""
-            added = datetime.fromisoformat(r["added_date"]).strftime("%B %d, %Y") if r.get("added_date") else "Unknown"
+            added = datetime.fromisoformat(r["added_date"]).strftime("%B %d, %Y")
 
             with st.expander(f"{r['name']}{icon}{fav}{visited} • {r['cuisine']} • {r['price']} • {r['location']}{notes_count} • Added: {added}",
-                             expanded=f"edit_mode_{place_id}" in st.session_state):
-                if f"edit_mode_{place_id}" not in st.session_state:
+                             expanded=f"edit_mode_{global_idx}" in st.session_state):
+                if f"edit_mode_{global_idx}" not in st.session_state:
                     col1, col2 = st.columns([3, 1])
                     with col1:
                         st.write(f"**Address:** {r.get('address', 'Not provided')}")
                         st.markdown(f"[📍 Google Maps]({google_maps_link(r.get('address', ''), r['name'])})")
                     with col2:
-                        if st.button("❤️ Unfavorite" if r.get("favorite") else "❤️ Favorite",
-                                     key=f"fav_{place_id}"):
-                            toggle_favorite(place_id)
-                        if st.button("✅ Mark as Unvisited" if r.get("visited") else "✅ Mark as Visited",
-                                     key=f"vis_{place_id}"):
-                            toggle_visited(place_id)
-                        if st.button("Edit ✏️", key=f"edit_{place_id}"):
-                            st.session_state[f"edit_mode_{place_id}"] = True
+                        st.button("❤️ Unfavorite" if r.get("favorite") else "❤️ Favorite",
+                                  key=f"fav_{global_idx}", on_click=toggle_favorite, args=(global_idx,))
+                        if st.button("Edit ✏️", key=f"edit_{global_idx}"):
+                            st.session_state[f"edit_mode_{global_idx}"] = True
                             st.rerun()
-                        if st.button("Delete 🗑️", key=f"del_{place_id}"):
-                            delete_place(place_id)
-                            st.session_state.restaurants = load_data()
-                            st.rerun()
+                        delete_key = f"del_confirm_{global_idx}"
+                        if delete_key in st.session_state:
+                            col_del, col_can = st.columns(2)
+                            with col_del:
+                                if st.button("🗑️ Confirm Delete", type="primary", key=f"conf_{global_idx}"):
+                                    delete_restaurant(global_idx)
+                            with col_can:
+                                if st.button("Cancel", key=f"can_{global_idx}"):
+                                    del st.session_state[delete_key]
+                                    st.rerun()
+                        else:
+                            if st.button("Delete 🗑️", key=f"del_{global_idx}"):
+                                st.session_state[delete_key] = True
+                                st.rerun()
 
-                    if r.get("photos", []):
+                    if r.get("photos"):
                         st.write("**Photos**")
                         cols = st.columns(3)
                         for i, url in enumerate(r["photos"]):
-                            if url:
-                                try:
-                                    response = requests.get(url)
-                                    response.raise_for_status()
-                                    img_bytes = response.content
-                                    cols[i % 3].image(img_bytes, use_column_width=True)
-                                except:
-                                    pass  # Silent on load failure
-                    else:
-                        st.info("No photos yet")
+                            cols[i % 3].image(url, use_column_width=True)
 
                     if r["reviews"]:
                         st.write("**Notes**")
@@ -219,7 +276,7 @@ if action == "View All Places":
 
                 else:
                     st.subheader(f"Editing: {r['name']}")
-                    with st.form(key=f"edit_form_{place_id}"):
+                    with st.form(key=f"edit_form_{global_idx}"):
                         new_name = st.text_input("Name*", value=r["name"])
                         new_cuisine = st.selectbox("Cuisine/Style*", CUISINES, index=CUISINES.index(r["cuisine"]))
                         new_price = st.selectbox("Price*", ["$", "$$", "$$$", "$$$$"], index=["$", "$$", "$$$", "$$$$"].index(r["price"]))
@@ -229,39 +286,33 @@ if action == "View All Places":
                                                 format_func=lambda x: "Restaurant 🍽️" if x=="restaurant" else "Cocktail Bar 🍸",
                                                 index=0 if r.get("type")=="restaurant" else 1)
                         new_visited = st.checkbox("✅ I've already visited", value=r.get("visited", False))
-                        current_date = datetime.fromisoformat(r["added_date"]).date() if r.get("added_date") else date.today()
+                        current_date = datetime.fromisoformat(r["added_date"]).date()
                         new_added_date = st.date_input("Date Added", value=current_date)
 
                         reviews_to_delete = []
                         for i, rev in enumerate(r["reviews"]):
                             col_text, col_del = st.columns([6, 1])
                             with col_text:
-                                new_comment = st.text_area("Comment", value=rev["comment"], height=80, key=f"com_{place_id}_{i}")
+                                new_comment = st.text_area("Comment", value=rev["comment"], height=80, key=f"com_{global_idx}_{i}")
                             with col_del:
-                                if st.checkbox("Delete", key=f"del_rev_{place_id}_{i}"):
+                                if st.checkbox("Delete", key=f"del_rev_{global_idx}_{i}"):
                                     reviews_to_delete.append(i)
                             rev["comment"] = new_comment
 
                         st.write("Add new note (optional)")
-                        new_rev_comment = st.text_area("Comment", height=80, key=f"new_rev_{place_id}")
+                        new_rev_comment = st.text_area("Comment", height=80, key=f"new_rev_{global_idx}")
 
                         photos_to_delete = []
-                        if r.get("photos", []):
+                        if r.get("photos"):
                             st.write("**Photos (check to delete)**")
                             cols = st.columns(3)
                             for i, url in enumerate(r["photos"]):
-                                if url:
-                                    with cols[i % 3]:
-                                        try:
-                                            response = requests.get(url)
-                                            response.raise_for_status()
-                                            st.image(response.content, use_column_width=True)
-                                        except:
-                                            st.write("Failed to load preview")
-                                        if st.checkbox("Delete", key=f"del_ph_{place_id}_{i}"):
-                                            photos_to_delete.append(url)
+                                with cols[i % 3]:
+                                    st.image(url, use_column_width=True)
+                                    if st.checkbox("Delete", key=f"del_ph_{global_idx}_{i}"):
+                                        photos_to_delete.append(url)
 
-                        new_photos = st.file_uploader("Add photos", type=["jpg","jpeg","png"], accept_multiple_files=True, key=f"new_ph_{place_id}")
+                        new_photos = st.file_uploader("Add photos", type=["jpg","jpeg","png"], accept_multiple_files=True, key=f"new_ph_{global_idx}")
 
                         col_save, col_cancel = st.columns(2)
                         with col_save:
@@ -270,21 +321,17 @@ if action == "View All Places":
                             cancel_btn = st.form_submit_button("Cancel")
 
                         if cancel_btn:
-                            del st.session_state[f"edit_mode_{place_id}"]
+                            del st.session_state[f"edit_mode_{global_idx}"]
                             st.rerun()
 
                         if save_btn:
                             if not new_name.strip() or not new_address.strip():
                                 st.error("Name and address required.")
-                            elif new_name.lower().strip() != r["name"].lower() and any(e["name"].lower() == new_name.lower().strip() for e in restaurants if e.get("id") != place_id):
+                            elif new_name.lower().strip() != r["name"].lower() and any(e["name"].lower() == new_name.lower().strip() for e in restaurants if e != r):
                                 st.warning("Name already exists!")
                             else:
                                 for url in photos_to_delete:
-                                    try:
-                                        file_name = url.split("/")[-1].split("?")[0]
-                                        supabase.storage.from_(STORAGE_BUCKET).remove([file_name])
-                                    except:
-                                        pass
+                                    delete_photo(url)
                                     if url in r["photos"]:
                                         r["photos"].remove(url)
 
@@ -300,10 +347,9 @@ if action == "View All Places":
 
                                 new_photo_urls = []
                                 if new_photos:
-                                    for p in new_photos:
-                                        url = upload_photo(p)
-                                        if url:
-                                            new_photo_urls.append(url)
+                                    for photo in new_photos:
+                                        url = upload_photo(photo)
+                                        new_photo_urls.append(url)
                                 r["photos"].extend(new_photo_urls)
 
                                 r.update({
@@ -314,13 +360,12 @@ if action == "View All Places":
                                     "address": new_address.strip(),
                                     "type": new_type,
                                     "visited": new_visited,
-                                    "added_date": new_added_date.isoformat()
+                                    "added_date": datetime.combine(new_added_date, datetime.min.time()).isoformat()
                                 })
 
-                                save_place(r)
-                                st.session_state.restaurants = load_data()
+                                save_data(restaurants)
                                 st.success(f"{new_name} saved!")
-                                del st.session_state[f"edit_mode_{place_id}"]
+                                del st.session_state[f"edit_mode_{global_idx}"]
                                 st.rerun()
 
 # ==================== Add a Place ====================
@@ -346,14 +391,9 @@ elif action == "Add a Place":
             elif any(r["name"].lower() == name.lower().strip() for r in restaurants):
                 st.warning("Already exists!")
             else:
-                photo_urls = []
-                if photos:
-                    for p in photos:
-                        url = upload_photo(p)
-                        if url:
-                            photo_urls.append(url)
+                photo_urls = [upload_photo(p) for p in photos] if photos else []
 
-                new_place = {
+                new = {
                     "name": name.strip(),
                     "cuisine": cuisine,
                     "price": price,
@@ -364,24 +404,21 @@ elif action == "Add a Place":
                     "visited": visited,
                     "photos": photo_urls,
                     "reviews": [],
-                    "added_date": added_date.isoformat()
+                    "added_date": datetime.combine(added_date, datetime.min.time()).isoformat()
                 }
                 if quick_notes.strip():
-                    new_place["reviews"].append({
+                    new["reviews"].append({
                         "comment": quick_notes.strip(),
                         "reviewer": "You",
                         "date": datetime.now().strftime("%B %d, %Y")
                     })
 
-                try:
-                    supabase.table("restaurants").insert(new_place).execute()
-                    st.session_state.restaurants = load_data()
-                    st.success(f"{name.strip()} added successfully!")
-                    st.rerun()
-                except Exception as e:
-                    st.error(f"Failed to add place: {str(e)}")
+                restaurants.append(new)
+                save_data(restaurants)
+                st.success(f"{name.strip()} added successfully!")
+                st.rerun()
 
-# ==================== Random Pick (with filters) ====================
+# ==================== Random Pick ====================
 else:
     st.header("🎲 Random Place Picker")
     if not restaurants:
@@ -408,10 +445,10 @@ else:
                          (visited_filter == "Visited Only" and r.get("visited")) or
                          (visited_filter == "Not Visited Yet" and not r.get("visited"))) ]
 
-        st.write(f"**{len(filtered)} places** match your filters")
+        st.write(f"**{len(filtered)} places** match")
 
         if not filtered:
-            st.warning("No places match — try loosening your filters!")
+            st.warning("No matches – broaden filters!")
         else:
             if st.button("🎲 Pick Random Place!", type="primary", use_container_width=True):
                 picked = random.choice(filtered)
@@ -420,7 +457,6 @@ else:
 
             if "last_pick" in st.session_state and st.session_state.last_pick in filtered:
                 c = st.session_state.last_pick
-                place_id = c.get("id", str(uuid.uuid4()))
                 with st.container(border=True):
                     tag = " 🍸 Cocktail Bar" if c.get("type")=="cocktail_bar" else " 🍽️ Restaurant"
                     fav = " ❤️" if c.get("favorite") else ""
@@ -430,30 +466,20 @@ else:
                     st.write(f"**Address:** {c.get('address','')}")
                     st.markdown(f"[📍 Google Maps]({google_maps_link(c.get('address',''), c['name'])})")
 
+                    idx = restaurants.index(c)
                     col_fav, col_vis = st.columns(2)
                     with col_fav:
-                        if st.button("❤️ Unfavorite" if c.get("favorite") else "❤️ Favorite",
-                                     key=f"rand_fav_{place_id}"):
-                            toggle_favorite(place_id)
+                        st.button("❤️ Unfavorite" if c.get("favorite") else "❤️ Favorite",
+                                  key=f"rand_fav_{idx}", on_click=toggle_favorite, args=(idx,))
                     with col_vis:
-                        if st.button("✅ Mark as Unvisited" if c.get("visited") else "✅ Mark as Visited",
-                                     key=f"rand_vis_{place_id}"):
-                            toggle_visited(place_id)
+                        st.button("✅ Mark as Unvisited" if c.get("visited") else "✅ Mark as Visited",
+                                  key=f"rand_vis_{idx}", on_click=toggle_visited, args=(idx,))
 
-                    if c.get("photos", []):
+                    if c.get("photos"):
                         st.markdown("### Photos")
                         cols = st.columns(3)
                         for i, url in enumerate(c["photos"]):
-                            if url:
-                                try:
-                                    response = requests.get(url)
-                                    response.raise_for_status()
-                                    img_bytes = response.content
-                                    cols[i % 3].image(img_bytes, use_column_width=True)
-                                except:
-                                    pass
-                    else:
-                        st.info("No photos yet")
+                            cols[i % 3].image(url, use_column_width=True)
 
                     if c["reviews"]:
                         st.markdown("### Notes")
