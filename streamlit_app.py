@@ -9,7 +9,7 @@ from io import BytesIO
 import io
 
 from googleapiclient.discovery import build
-from googleapiclient.http import MediaFileUpload, MediaIoBaseDownload, MediaIoBaseUpload
+from googleapiclient.http import MediaIoBaseDownload, MediaIoBaseUpload
 from google.oauth2 import service_account
 
 # ==================== GOOGLE DRIVE SETUP ====================
@@ -25,7 +25,7 @@ IMAGES_FOLDER_NAME = "images"
 
 def get_or_create_folder(name, parent_id=DRIVE_FOLDER_ID):
     query = f"name='{name}' and mimeType='application/vnd.google-apps.folder' and '{parent_id}' in parents and trashed=false"
-    results = drive_service.files().list(q=query, fields="files(id)").execute()
+    results = drive_service.files().list(q=query, fields="files(id)", supportsAllDrives=True).execute()
     files = results.get('files', [])
     if files:
         return files[0]['id']
@@ -34,12 +34,16 @@ def get_or_create_folder(name, parent_id=DRIVE_FOLDER_ID):
         'mimeType': 'application/vnd.google-apps.folder',
         'parents': [parent_id]
     }
-    folder = drive_service.files().create(body=metadata, fields='id').execute()
+    folder = drive_service.files().create(
+        body=metadata,
+        fields='id',
+        supportsAllDrives=True
+    ).execute()
     return folder.get('id')
 
 def get_file_id(name, parent_id=DRIVE_FOLDER_ID):
     query = f"name='{name}' and '{parent_id}' in parents and trashed=false"
-    results = drive_service.files().list(q=query, fields="files(id)").execute()
+    results = drive_service.files().list(q=query, fields="files(id)", supportsAllDrives=True).execute()
     files = results.get('files', [])
     return files[0]['id'] if files else None
 
@@ -72,17 +76,26 @@ def load_data():
 
 def save_data(data):
     content = json.dumps(data, indent=4).encode('utf-8')
-    media = MediaFileUpload(io.BytesIO(content), mimetype='application/json')
+    media = MediaIoBaseUpload(io.BytesIO(content), mimetype='application/json')
     file_id = get_file_id(DATA_FILE_NAME)
     if file_id:
-        drive_service.files().update(fileId=file_id, media_body=media).execute()
+        drive_service.files().update(
+            fileId=file_id,
+            media_body=media,
+            supportsAllDrives=True
+        ).execute()
     else:
         metadata = {'name': DATA_FILE_NAME, 'parents': [DRIVE_FOLDER_ID]}
-        drive_service.files().create(body=metadata, media_body=media, fields='id').execute()
+        drive_service.files().create(
+            body=metadata,
+            media_body=media,
+            fields='id',
+            supportsAllDrives=True
+        ).execute()
 
 def upload_photo(photo_file):
     """Upload photo to Drive images folder and return direct view link"""
-    photo_file.seek(0)  # Reset pointer
+    photo_file.seek(0)
     file_data = photo_file.getvalue()
     
     file_metadata = {
@@ -90,9 +103,10 @@ def upload_photo(photo_file):
         'parents': [IMAGES_FOLDER_ID]
     }
     
-    # Use MediaIoBaseUpload to avoid filename path issues
-    media = MediaIoBaseUpload(io.BytesIO(file_data), 
-                              mimetype=photo_file.type or 'application/octet-stream')
+    media = MediaIoBaseUpload(
+        io.BytesIO(file_data),
+        mimetype=photo_file.type or 'application/octet-stream'
+    )
     
     file = drive_service.files().create(
         body=file_metadata,
@@ -102,21 +116,20 @@ def upload_photo(photo_file):
     ).execute()
     
     file_id = file['id']
-    # Make publicly viewable
     drive_service.permissions().create(
         fileId=file_id,
-        body={'type': 'anyone', 'role': 'reader'}
+        body={'type': 'anyone', 'role': 'reader'},
+        supportsAllDrives=True
     ).execute()
     
     return file['webViewLink']
 
 def delete_photo(photo_url):
-    """Delete photo from Drive using its webViewLink"""
     try:
         file_id = photo_url.split('/d/')[1].split('/')[0]
-        drive_service.files().delete(fileId=file_id).execute()
+        drive_service.files().delete(fileId=file_id, supportsAllDrives=True).execute()
     except:
-        pass  # Silent if already gone
+        pass
 
 # Load data
 if "restaurants" not in st.session_state:
@@ -163,7 +176,7 @@ with st.sidebar.expander("⚙️ Data Management"):
                         while not done:
                             _, done = downloader.next_chunk()
                         img_io.seek(0)
-                        zip_file.writestr(f"images/{url.split('=')[-1] or file_id}.jpg", img_io.read())
+                        zip_file.writestr(f"images/{url.split('/')[-1].split('=')[0]}.jpg", img_io.read())
                     except:
                         continue
         zip_buffer.seek(0)
