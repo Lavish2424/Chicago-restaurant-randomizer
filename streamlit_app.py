@@ -38,8 +38,10 @@ def save_data(data):
             if place_id:
                 supabase.table("restaurants").update(place).eq("id", place_id).execute()
             else:
-                # New place without id – insert and let Supabase generate id
-                supabase.table("restaurants").insert(place).execute()
+                # New place – insert and return the row so we get the generated id
+                response = supabase.table("restaurants").insert(place).select().execute()
+                if response.data:
+                    place["id"] = response.data[0]["id"]
     except Exception as e:
         st.error(f"Error saving data: {str(e)}")
 
@@ -80,6 +82,28 @@ st.sidebar.header("Actions")
 action = st.sidebar.radio("What do you want to do?", ["View All Places", "Add a Place", "Random Pick (with filters)"])
 
 st.sidebar.markdown("---")
+
+# One-time repair tool for missing IDs
+with st.sidebar.expander("🔧 Fix Missing IDs (Run Once If Needed)"):
+    st.write("If you see warnings about missing IDs, click below to repair them.")
+    if st.button("Repair Missing IDs"):
+        repaired = 0
+        current_data = st.session_state.restaurants.copy()
+        for place in current_data:
+            if not place.get("id"):
+                try:
+                    # Dummy update to force Supabase to return/assign an ID (requires a unique constraint or RLS allowing it)
+                    supabase.table("restaurants").update({"favorite": place.get("favorite", False)}).eq("name", place["name"]).execute()
+                    repaired += 1
+                except Exception as e:
+                    st.error(f"Could not repair {place['name']}: {e}")
+        st.session_state.restaurants = load_data()
+        if repaired:
+            st.success(f"Repaired {repaired} places! Warnings should disappear now.")
+        else:
+            st.info("No places needed repair, or repair didn't work (check RLS/policies).")
+        st.rerun()
+
 with st.sidebar.expander("⚙️ Data Management"):
     if st.button("Download backup (JSON + Images)"):
         zip_buffer = BytesIO()
@@ -118,24 +142,22 @@ def delete_restaurant_by_id(place_id):
         st.error("Cannot delete: missing ID")
         return
     
-    # Find the restaurant
     r = next((p for p in restaurants if p.get("id") == place_id), None)
     if not r:
         st.error("Place not found")
         return
     
-    # Delete photos from storage
+    # Delete photos
     for url in r.get("photos", []):
         delete_photo(url)
     
-    # Remove from Supabase
+    # Delete from Supabase
     try:
         supabase.table("restaurants").delete().eq("id", place_id).execute()
     except Exception as e:
         st.error(f"Failed to delete from database: {e}")
         return
     
-    # Reload fresh data
     st.session_state.restaurants = load_data()
     st.success(f"{r['name']} deleted!")
     st.rerun()
@@ -187,7 +209,7 @@ if action == "View All Places":
         for r in sorted_places:
             place_id = r.get("id")
             if not place_id:
-                st.warning("A place is missing an ID – editing/deleting may not work properly.")
+                st.warning(f"⚠️ **{r['name']}** is missing an ID – use the 'Repair Missing IDs' tool in the sidebar.")
                 continue
 
             icon = " 🍸" if r.get("type") == "cocktail_bar" else " 🍽️"
@@ -212,7 +234,7 @@ if action == "View All Places":
                             st.session_state[f"edit_mode_{place_id}"] = True
                             st.rerun()
 
-                        # === SAFE DELETE CONFIRMATION ===
+                        # Safe delete confirmation
                         confirm_key = f"confirm_delete_{place_id}"
                         if confirm_key in st.session_state:
                             col_del, col_can = st.columns(2)
@@ -228,7 +250,7 @@ if action == "View All Places":
                                 st.session_state[confirm_key] = True
                                 st.rerun()
 
-                    # Photos
+                    # Photos and notes display (unchanged)
                     if r.get("photos"):
                         st.write("**Photos**")
                         cols = st.columns(3)
@@ -241,7 +263,6 @@ if action == "View All Places":
                                 except:
                                     cols[i % 3].write("Failed to load image")
 
-                    # Notes
                     if r["reviews"]:
                         st.write("**Notes**")
                         for rev in reversed(r["reviews"]):
@@ -252,7 +273,7 @@ if action == "View All Places":
                         st.write("_No notes yet — be the first!_")
 
                 else:
-                    # === EDIT MODE (unchanged, just using place_id for keys) ===
+                    # Edit mode (keys now use place_id)
                     st.subheader(f"Editing: {r['name']}")
                     with st.form(key=f"edit_form_{place_id}"):
                         new_name = st.text_input("Name*", value=r["name"])
@@ -386,7 +407,8 @@ elif action == "Add a Place":
                         "date": datetime.now().strftime("%B %d, %Y")
                     })
                 try:
-                    supabase.table("restaurants").insert(new).execute()
+                    # Critical: .select() to get back the generated id
+                    supabase.table("restaurants").insert(new).select().execute()
                     st.session_state.restaurants = load_data()
                     st.success(f"{name} added!")
                     st.rerun()
