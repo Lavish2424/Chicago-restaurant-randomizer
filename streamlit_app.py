@@ -6,6 +6,7 @@ import uuid
 from datetime import datetime, date
 import zipfile
 from io import BytesIO
+import requests
 
 from supabase import create_client, Client
 
@@ -191,8 +192,14 @@ if action == "View All Places":
                         st.write("**Photos**")
                         cols = st.columns(3)
                         for i, url in enumerate(r["photos"]):
-                            if url:  # Safety check
-                                cols[i % 3].image(url, use_column_width=True)
+                            if url:
+                                try:
+                                    response = requests.get(url)
+                                    response.raise_for_status()
+                                    img_bytes = response.content
+                                    cols[i % 3].image(img_bytes, use_column_width=True)
+                                except:
+                                    cols[i % 3].error("Failed to load image")
 
                     if r["reviews"]:
                         st.write("**Notes**")
@@ -238,7 +245,12 @@ if action == "View All Places":
                             for i, url in enumerate(r["photos"]):
                                 if url:
                                     with cols[i % 3]:
-                                        st.image(url, use_column_width=True)
+                                        try:
+                                            response = requests.get(url)
+                                            response.raise_for_status()
+                                            st.image(response.content, use_column_width=True)
+                                        except:
+                                            st.error("Failed to load preview")
                                         if st.checkbox("Delete", key=f"del_ph_{place_id}_{i}"):
                                             photos_to_delete.append(url)
 
@@ -424,7 +436,13 @@ else:
                         cols = st.columns(3)
                         for i, url in enumerate(c["photos"]):
                             if url:
-                                cols[i % 3].image(url, use_column_width=True)
+                                try:
+                                    response = requests.get(url)
+                                    response.raise_for_status()
+                                    img_bytes = response.content
+                                    cols[i % 3].image(img_bytes, use_column_width=True)
+                                except:
+                                    cols[i % 3].error("Failed to load image")
 
                     if c["reviews"]:
                         st.markdown("### Notes")
