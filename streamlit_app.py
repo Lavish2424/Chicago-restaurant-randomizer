@@ -48,20 +48,16 @@ def upload_photo(photo_file):
         file_bytes = photo_file.getvalue()
         file_name = f"{uuid.uuid4().hex[:12]}_{photo_file.name}"
 
-        # Safely determine content-type
-        if hasattr(photo_file, "type") and isinstance(photo_file.type, str) and photo_file.type:
-            content_type = photo_file.type
-        else:
-            # Fallback based on extension
-            ext = photo_file.name.lower().split(".")[-1]
-            mime_map = {
-                "jpg": "image/jpeg",
-                "jpeg": "image/jpeg",
-                "png": "image/png",
-                "gif": "image/gif",
-                "webp": "image/webp",
-            }
-            content_type = mime_map.get(ext, "application/octet-stream")
+        # Always guess content-type from file extension (safest and most reliable)
+        ext = photo_file.name.lower().split(".")[-1] if "." in photo_file.name else ""
+        mime_map = {
+            "jpg": "image/jpeg",
+            "jpeg": "image/jpeg",
+            "png": "image/png",
+            "gif": "image/gif",
+            "webp": "image/webp",
+        }
+        content_type = mime_map.get(ext, "application/octet-stream")
 
         supabase.storage.from_(STORAGE_BUCKET).upload(
             path=file_name,
