@@ -17,35 +17,55 @@ supabase: Client = create_client(supabase_url, supabase_key)
 STORAGE_BUCKET = "images"  # Your public bucket name
 
 def load_data():
-    response = supabase.table("restaurants").select("*").order("added_date", desc=True).execute()
-    data = response.data
-    for place in data:
-        place.setdefault("favorite", False)
-        place.setdefault("visited", False)
-        place.setdefault("photos", [])
-        place.setdefault("reviews", [])
-    return data
+    try:
+        response = supabase.table("restaurants").select("*").order("added_date", desc=True).execute()
+        data = response.data
+        for place in data:
+            place.setdefault("favorite", False)
+            place.setdefault("visited", False)
+            place.setdefault("photos", [])
+            place.setdefault("reviews", [])
+        return data
+    except Exception as e:
+        st.error(f"Error loading data: {str(e)}")
+        return []
 
 def save_place(place):
-    supabase.table("restaurants").upsert(place).execute()
+    try:
+        supabase.table("restaurants").upsert(place).execute()
+    except Exception as e:
+        st.error(f"Error saving place: {str(e)}")
 
 def delete_place(place_id):
-    # Delete photos first
-    response = supabase.table("restaurants").select("photos").eq("id", place_id).execute()
-    if response.data:
-        for url in response.data[0].get("photos", []):
-            try:
-                file_name = url.split("/")[-1].split("?")[0]
-                supabase.storage.from_(STORAGE_BUCKET).remove(file_name)
-            except:
-                pass
-    supabase.table("restaurants").delete().eq("id", place_id).execute()
+    try:
+        # Delete photos first
+        response = supabase.table("restaurants").select("photos").eq("id", place_id).execute()
+        if response.data:
+            for url in response.data[0].get("photos", []):
+                try:
+                    file_name = url.split("/")[-1].split("?")[0]
+                    supabase.storage.from_(STORAGE_BUCKET).remove([file_name])
+                except:
+                    pass
+        supabase.table("restaurants").delete().eq("id", place_id).execute()
+    except Exception as e:
+        st.error(f"Error deleting place: {str(e)}")
 
 def upload_photo(photo_file):
-    photo_file.seek(0)
-    file_name = f"{uuid.uuid4().hex[:12]}_{photo_file.name}"
-    supabase.storage.from_(STORAGE_BUCKET).upload(file_name, photo_file.getvalue())
-    return supabase.storage.from_(STORAGE_BUCKET).get_public_url(file_name)
+    try:
+        photo_file.seek(0)
+        file_bytes = photo_file.getvalue()
+        file_name = f"{uuid.uuid4().hex[:12]}_{photo_file.name}"
+        # Use upsert=True to avoid duplicate key errors if needed
+        supabase.storage.from_(STORAGE_BUCKET).upload(
+            path=file_name,
+            file=file_bytes,
+            file_options={"content-type": photo_file.type or "application/octet-stream", "upsert": True}
+        )
+        return supabase.storage.from_(STORAGE_BUCKET).get_public_url(file_name)
+    except Exception as e:
+        st.error(f"Photo upload failed: {str(e)}")
+        return None
 
 # Load data
 if "restaurants" not in st.session_state:
@@ -96,16 +116,18 @@ CUISINES = ["Chinese", "Italian", "American", "Mexican", "Japanese", "Indian", "
 VISITED_OPTIONS = ["All", "Visited Only", "Not Visited Yet"]
 
 def toggle_favorite(place_id):
-    place = next(r for r in restaurants if r["id"] == place_id)
-    place["favorite"] = not place.get("favorite", False)
-    save_place(place)
-    st.session_state.restaurants = load_data()
+    place = next((r for r in restaurants if r["id"] == place_id), None)
+    if place:
+        place["favorite"] = not place.get("favorite", False)
+        save_place(place)
+        st.session_state.restaurants = load_data()
 
 def toggle_visited(place_id):
-    place = next(r for r in restaurants if r["id"] == place_id)
-    place["visited"] = not place.get("visited", False)
-    save_place(place)
-    st.session_state.restaurants = load_data()
+    place = next((r for r in restaurants if r["id"] == place_id), None)
+    if place:
+        place["visited"] = not place.get("visited", False)
+        save_place(place)
+        st.session_state.restaurants = load_data()
 
 def google_maps_link(address, name=""):
     query = f"{name}, {address}" if name else address
@@ -145,7 +167,7 @@ if action == "View All Places":
             fav = " ❤️" if r.get("favorite") else ""
             visited = " ✅" if r.get("visited") else ""
             notes_count = f" • {len(r['reviews'])} note{'s' if len(r['reviews']) != 1 else ''}" if r["reviews"] else ""
-            added = datetime.fromisoformat(r["added_date"]).strftime("%B %d, %Y") if r["added_date"] else "Unknown"
+            added = datetime.fromisoformat(r["added_date"]).strftime("%B %d, %Y") if r.get("added_date") else "Unknown"
 
             with st.expander(f"{r['name']}{icon}{fav}{visited} • {r['cuisine']} • {r['price']} • {r['location']}{notes_count} • Added: {added}",
                              expanded=f"edit_mode_{r['id']}" in st.session_state):
@@ -193,7 +215,7 @@ if action == "View All Places":
                                                 format_func=lambda x: "Restaurant 🍽️" if x=="restaurant" else "Cocktail Bar 🍸",
                                                 index=0 if r.get("type")=="restaurant" else 1)
                         new_visited = st.checkbox("✅ I've already visited", value=r.get("visited", False))
-                        current_date = datetime.fromisoformat(r["added_date"]).date() if r["added_date"] else date.today()
+                        current_date = datetime.fromisoformat(r["added_date"]).date() if r.get("added_date") else date.today()
                         new_added_date = st.date_input("Date Added", value=current_date)
 
                         reviews_to_delete = []
@@ -234,14 +256,14 @@ if action == "View All Places":
                         if save_btn:
                             if not new_name.strip() or not new_address.strip():
                                 st.error("Name and address required.")
-                            elif new_name.lower().strip() != r["name"].lower() and any(e["name"].lower() == new_name.lower().strip() for e in restaurants if e != r):
+                            elif new_name.lower().strip() != r["name"].lower() and any(e["name"].lower() == new_name.lower().strip() for e in restaurants if e["id"] != r["id"]):
                                 st.warning("Name already exists!")
                             else:
                                 # Delete selected photos
                                 for url in photos_to_delete:
                                     try:
                                         file_name = url.split("/")[-1].split("?")[0]
-                                        supabase.storage.from_(STORAGE_BUCKET).remove(file_name)
+                                        supabase.storage.from_(STORAGE_BUCKET).remove([file_name])
                                     except:
                                         pass
                                     if url in r["photos"]:
@@ -260,7 +282,12 @@ if action == "View All Places":
                                     })
 
                                 # Add new photos
-                                new_photo_urls = [upload_photo(p) for p in new_photos] if new_photos else []
+                                new_photo_urls = []
+                                if new_photos:
+                                    for p in new_photos:
+                                        url = upload_photo(p)
+                                        if url:
+                                            new_photo_urls.append(url)
                                 r["photos"].extend(new_photo_urls)
 
                                 # Update fields
@@ -304,7 +331,12 @@ elif action == "Add a Place":
             elif any(r["name"].lower() == name.lower().strip() for r in restaurants):
                 st.warning("Already exists!")
             else:
-                photo_urls = [upload_photo(p) for p in photos] if photos else []
+                photo_urls = []
+                if photos:
+                    for p in photos:
+                        url = upload_photo(p)
+                        if url:
+                            photo_urls.append(url)
 
                 new_place = {
                     "name": name.strip(),
@@ -326,10 +358,13 @@ elif action == "Add a Place":
                         "date": datetime.now().strftime("%B %d, %Y")
                     })
 
-                supabase.table("restaurants").insert(new_place).execute()
-                st.session_state.restaurants = load_data()
-                st.success(f"{name.strip()} added successfully!")
-                st.rerun()
+                try:
+                    supabase.table("restaurants").insert(new_place).execute()
+                    st.session_state.restaurants = load_data()
+                    st.success(f"{name.strip()} added successfully!")
+                    st.rerun()
+                except Exception as e:
+                    st.error(f"Failed to add place: {str(e)}")
 
 # ==================== Random Pick (with filters) ====================
 else:
