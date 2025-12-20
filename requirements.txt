@@ -1,2 +1,2 @@
+streamlit
 supabase
-st-supabase-connection  # Optional but recommended for caching
