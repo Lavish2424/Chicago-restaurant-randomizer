@@ -11,8 +11,8 @@ import requests
 from supabase import create_client, Client
 
 # ==================== SUPABASE SETUP ====================
-supabase_url = st.secrets["SUPABASE_URL"]
-supabase_key = st.secrets["SUPABASE_ANON_KEY"]
+supabase_url = st.secrets["https://qlzhfxxxgteuzvkqetin.supabase.co"]
+supabase_key = st.secrets["eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InFsemhmeHh4Z3RldXp2a3FldGluIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjYyMDk4MTAsImV4cCI6MjA4MTc4NTgxMH0.lRdvXohD6L6VXH0jG_VxWu9rkv0t3-c9wY_IH7oBTI8"]
 supabase: Client = create_client(supabase_url, supabase_key)
 
 STORAGE_BUCKET = "images"  # Make sure this public bucket exists in Supabase
