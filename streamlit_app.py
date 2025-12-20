@@ -1,16 +1,108 @@
 import streamlit as st
 import json
-import os
 import random
 import urllib.parse
 import uuid
 from datetime import datetime
 import zipfile
 from io import BytesIO
+import requests
 
-DATA_FILE = "restaurants.json"
-IMAGES_DIR = "images"
-os.makedirs(IMAGES_DIR, exist_ok=True)
+from supabase import create_client, Client
+
+# ==================== SUPABASE SETUP ====================
+supabase_url = st.secrets["SUPABASE_URL"]
+supabase_key = st.secrets["SUPABASE_ANON_KEY"]
+supabase: Client = create_client(supabase_url, supabase_key)
+
+STORAGE_BUCKET = "images"  # Make sure this public bucket exists in Supabase
+
+def load_data():
+    try:
+        response = supabase.table("restaurants").select("*").order("added_date", desc=True).execute()
+        data = response.data
+        for place in data:
+            place.setdefault("favorite", False)
+            place.setdefault("visited", False)
+            place.setdefault("photos", [])
+            place.setdefault("reviews", [])
+            if "added_date" not in place:
+                place["added_date"] = datetime.now().isoformat()
+        return data
+    except Exception as e:
+        st.error(f"Error loading data: {str(e)}")
+        return []
+
+def save_data(data):
+    try:
+        for place in data:
+            place_id = place.get("id")
+            if place_id:
+                supabase.table("restaurants").update(place).eq("id", place_id).execute()
+            else:
+                # New place without id
+                supabase.table("restaurants").insert(place).execute()
+    except Exception as e:
+        st.error(f"Error saving data: {str(e)}")
+
+def upload_photo(photo_file):
+    try:
+        photo_file.seek(0)
+        file_bytes = photo_file.getvalue()
+        file_name = f"{uuid.uuid4().hex[:12]}_{photo_file.name}"
+        supabase.storage.from_(STORAGE_BUCKET).upload(
+            path=file_name,
+            file=file_bytes,
+            file_options={"content-type": photo_file.type or "application/octet-stream", "upsert": True}
+        )
+        return supabase.storage.from_(STORAGE_BUCKET).get_public_url(file_name)
+    except Exception as e:
+        st.error(f"Photo upload failed: {str(e)}")
+        return None
+
+def delete_photo(photo_url):
+    if not photo_url:
+        return
+    try:
+        file_name = photo_url.split("/")[-1].split("?")[0]
+        supabase.storage.from_(STORAGE_BUCKET).remove([file_name])
+    except:
+        pass
+
+# Load data into session state
+if "restaurants" not in st.session_state:
+    st.session_state.restaurants = load_data()
+
+restaurants = st.session_state.restaurants
+
+st.markdown("<h1 style='text-align: center;'>🍽️ Chicago Restaurant/Bar Randomizer</h1>", unsafe_allow_html=True)
+st.markdown("<p style='text-align: center;'>Add, favorite, and randomly pick Chicago eats & drinks! 🍸</p>", unsafe_allow_html=True)
+
+st.sidebar.header("Actions")
+action = st.sidebar.radio("What do you want to do?", ["View All Places", "Add a Place", "Random Pick (with filters)"])
+
+st.sidebar.markdown("---")
+
+with st.sidebar.expander("⚙️ Data Management"):
+    if st.button("Download backup (JSON + Images)"):
+        zip_buffer = BytesIO()
+        with zipfile.ZipFile(zip_buffer, "w", zipfile.ZIP_DEFLATED) as zip_file:
+            json_bytes = json.dumps(restaurants, indent=4).encode('utf-8')
+            zip_file.writestr("restaurants.json", json_bytes)
+            for place in restaurants:
+                for url in place.get("photos", []):
+                    try:
+                        response = requests.get(url)
+                        response.raise_for_status()
+                        file_name = url.split("/")[-1].split("?")[0]
+                        zip_file.writestr(f"images/{file_name}", response.content)
+                    except:
+                        pass
+        zip_buffer.seek(0)
+        st.download_button("📥 Download full backup (ZIP)", zip_buffer.getvalue(),
+                           f"chicago_restaurants_backup_{datetime.now().strftime('%Y%m%d_%H%M')}.zip", "application/zip")
+
+st.sidebar.caption("Built by Alan, made for us ❤️")
 
 NEIGHBORHOODS = [
     "Fulton Market", "River North", "Gold Coast", "South Loop",
@@ -23,108 +115,27 @@ CUISINES = [
 ]
 VISITED_OPTIONS = ["All", "Visited Only", "Not Visited Yet"]
 
-def load_data():
-    if os.path.exists(DATA_FILE):
-        try:
-            with open(DATA_FILE, "r") as f:
-                data = json.load(f)
-                for place in data:
-                    if "favorite" not in place: place["favorite"] = False
-                    if "visited" not in place: place["visited"] = False
-                    if "photos" not in place: place["photos"] = []
-                    if "reviews" not in place: place["reviews"] = []
-                    if "added_date" not in place: place["added_date"] = datetime.now().isoformat()
-                return data
-        except json.JSONDecodeError:
-            st.error("Data file is corrupted. Starting with empty list.")
-            return []
-    return []
-
-def save_data(data):
-    with open(DATA_FILE, "w") as f:
-        json.dump(data, f, indent=4)
-
-if "restaurants" not in st.session_state:
-    st.session_state.restaurants = load_data()
-
-restaurants = st.session_state.restaurants
-
-st.markdown("<h1 style='text-align: center;'>🍽️ Chicago Restaurant/Bar Randomizer</h1>", unsafe_allow_html=True)
-st.markdown("<p style='text-align: center;'>Add, favorite, and randomly pick Chicago eats & drinks! 🍸</p>", unsafe_allow_html=True)
-
-st.sidebar.header("Actions")
-action = st.sidebar.radio("What do you want to do?", ["View All Places", "Add a Place", "Random Pick (with filters)"])
-st.sidebar.markdown("---")
-
-with st.sidebar.expander("⚙️ Data Management"):
-    if st.button("Download backup (JSON + Images)"):
-        zip_buffer = BytesIO()
-        with zipfile.ZipFile(zip_buffer, "w", zipfile.ZIP_DEFLATED) as zip_file:
-            if os.path.exists(DATA_FILE):
-                zip_file.write(DATA_FILE, os.path.basename(DATA_FILE))
-            else:
-                empty_data = []
-                json_bytes = json.dumps(empty_data, indent=4).encode('utf-8')
-                zip_file.writestr(os.path.basename(DATA_FILE), json_bytes)
-            if os.path.exists(IMAGES_DIR):
-                for root, _, files in os.walk(IMAGES_DIR):
-                    for file in files:
-                        file_path = os.path.join(root, file)
-                        arcname = os.path.relpath(file_path, start=os.path.dirname(IMAGES_DIR))
-                        zip_file.write(file_path, arcname)
-        zip_buffer.seek(0)
-        st.download_button("📥 Download full backup (ZIP)", zip_buffer.getvalue(),
-                           f"chicago_restaurants_backup_{datetime.now().strftime('%Y%m%d_%H%M')}.zip", "application/zip")
-
-    uploaded_backup = st.file_uploader("Restore from backup (ZIP or JSON)", type=["json", "zip"], key="backup_uploader")
-    if uploaded_backup and st.button("Restore Backup", type="primary"):
-        try:
-            if uploaded_backup.type == "application/zip" or uploaded_backup.name.endswith(".zip"):
-                with zipfile.ZipFile(uploaded_backup, "r") as zip_file:
-                    for name in zip_file.namelist():
-                        if os.path.basename(name) == os.path.basename(DATA_FILE):
-                            data = json.loads(zip_file.read(name))
-                            save_data(data)
-                            st.session_state.restaurants = data
-                            break
-                    for name in zip_file.namelist():
-                        if name.startswith("images/") or name.startswith(IMAGES_DIR + "/"):
-                            target_path = os.path.join(IMAGES_DIR, os.path.basename(name))
-                            os.makedirs(os.path.dirname(target_path), exist_ok=True)
-                            with open(target_path, "wb") as f:
-                                f.write(zip_file.read(name))
-                st.success("Full backup restored!")
-                st.balloons()
-            else:
-                data = json.load(uploaded_backup)
-                save_data(data)
-                st.session_state.restaurants = data
-                st.success("JSON restored!")
-                st.balloons()
-            st.rerun()
-        except Exception as e:
-            st.error(f"Error: {str(e)}")
-
-st.sidebar.caption("Built by Alan, made for us ❤️")
-
 def delete_restaurant(index):
     r = restaurants[index]
-    if r.get("photos"):
-        for p in r["photos"]:
-            if os.path.exists(p): os.remove(p)
+    for url in r.get("photos", []):
+        delete_photo(url)
     del restaurants[index]
     save_data(restaurants)
+    st.session_state.restaurants = load_data()
     st.success(f"{r['name']} deleted!")
-    st.balloons()
     st.rerun()
 
 def toggle_favorite(idx):
     restaurants[idx]["favorite"] = not restaurants[idx].get("favorite", False)
     save_data(restaurants)
+    st.session_state.restaurants = load_data()
+    st.rerun()
 
 def toggle_visited(idx):
     restaurants[idx]["visited"] = not restaurants[idx].get("visited", False)
     save_data(restaurants)
+    st.session_state.restaurants = load_data()
+    st.rerun()
 
 def google_maps_link(address, name=""):
     query = f"{name}, {address}" if name else address
@@ -142,14 +153,12 @@ if action == "View All Places":
             search_term = st.text_input("🔍 Search name, cuisine, neighborhood, address", key="search_input")
         with col_sort:
             sort_option = st.selectbox("Sort by", ["A-Z (Name)", "Latest Added", "Favorites First"])
-
         filtered = restaurants.copy()
         if search_term:
             lower = search_term.lower()
             filtered = [r for r in filtered if lower in r["name"].lower() or
                         lower in r["cuisine"].lower() or lower in r["location"].lower() or
                         lower in r.get("address", "").lower()]
-
         if sort_option == "A-Z (Name)":
             sorted_places = sorted(filtered, key=lambda x: x["name"].lower())
         elif sort_option == "Latest Added":
@@ -157,7 +166,6 @@ if action == "View All Places":
         else:
             sorted_places = sorted([r for r in filtered if r.get("favorite")], key=lambda x: x["name"].lower()) + \
                             sorted([r for r in filtered if not r.get("favorite")], key=lambda x: x["name"].lower())
-
         for idx, r in enumerate(sorted_places):
             global_idx = restaurants.index(r)
             icon = " 🍸" if r.get("type") == "cocktail_bar" else " 🍽️"
@@ -172,8 +180,9 @@ if action == "View All Places":
                         st.write(f"**Address:** {r.get('address', 'Not provided')}")
                         st.markdown(f"[📍 Google Maps]({google_maps_link(r.get('address', ''), r['name'])})")
                     with col2:
-                        st.button("❤️ Unfavorite" if r.get("favorite") else "❤️ Favorite",
-                                  key=f"fav_{global_idx}", on_click=toggle_favorite, args=(global_idx,))
+                        if st.button("❤️ Unfavorite" if r.get("favorite") else "❤️ Favorite",
+                                     key=f"fav_{global_idx}"):
+                            toggle_favorite(global_idx)
                         if st.button("Edit ✏️", key=f"edit_{global_idx}"):
                             st.session_state[f"edit_mode_{global_idx}"] = True
                             st.rerun()
@@ -194,8 +203,14 @@ if action == "View All Places":
                     if r.get("photos"):
                         st.write("**Photos**")
                         cols = st.columns(3)
-                        for i, p in enumerate(r["photos"]):
-                            if os.path.exists(p): cols[i%3].image(p, use_column_width=True)
+                        for i, url in enumerate(r["photos"]):
+                            if url:
+                                try:
+                                    response = requests.get(url)
+                                    response.raise_for_status()
+                                    cols[i%3].image(response.content, use_column_width=True)
+                                except:
+                                    cols[i%3].write("Failed to load image")
                     if r["reviews"]:
                         st.write("**Notes**")
                         for rev in reversed(r["reviews"]):
@@ -232,12 +247,17 @@ if action == "View All Places":
                         photos_to_delete = []
                         if r.get("photos"):
                             cols = st.columns(3)
-                            for i, p in enumerate(r["photos"]):
-                                if os.path.exists(p):
+                            for i, url in enumerate(r["photos"]):
+                                if url:
                                     with cols[i%3]:
-                                        st.image(p, use_column_width=True)
+                                        try:
+                                            response = requests.get(url)
+                                            response.raise_for_status()
+                                            st.image(response.content, use_column_width=True)
+                                        except:
+                                            st.write("Failed to load preview")
                                         if st.checkbox("Delete", key=f"del_ph_{global_idx}_{i}"):
-                                            photos_to_delete.append(p)
+                                            photos_to_delete.append(url)
                         new_photos = st.file_uploader("Add photos", type=["jpg","jpeg","png"], accept_multiple_files=True, key=f"new_ph_{global_idx}")
                         col_save, col_cancel = st.columns(2)
                         with col_save:
@@ -253,9 +273,10 @@ if action == "View All Places":
                             elif new_name.lower().strip() != r["name"].lower() and any(e["name"].lower() == new_name.lower().strip() for e in restaurants if e != r):
                                 st.warning("Name already exists!")
                             else:
-                                for p in photos_to_delete:
-                                    if os.path.exists(p): os.remove(p)
-                                    if p in r["photos"]: r["photos"].remove(p)
+                                for url in photos_to_delete:
+                                    delete_photo(url)
+                                    if url in r["photos"]:
+                                        r["photos"].remove(url)
                                 for i in sorted(reviews_to_delete, reverse=True):
                                     del r["reviews"][i]
                                 if new_rev_comment.strip():
@@ -264,14 +285,13 @@ if action == "View All Places":
                                         "reviewer": "You",
                                         "date": datetime.now().strftime("%B %d, %Y")
                                     })
+                                new_photo_urls = []
                                 if new_photos:
-                                    safe = "".join(c for c in new_name if c.isalnum() or c in " -_").replace(" ", "_")
                                     for photo in new_photos:
-                                        ext = photo.name.split(".")[-1].lower()
-                                        fname = f"{safe}_{uuid.uuid4().hex[:8]}.{ext}"
-                                        path = os.path.join(IMAGES_DIR, fname)
-                                        with open(path, "wb") as f: f.write(photo.getbuffer())
-                                        r["photos"].append(path)
+                                        url = upload_photo(photo)
+                                        if url:
+                                            new_photo_urls.append(url)
+                                r["photos"].extend(new_photo_urls)
                                 r.update({
                                     "name": new_name.strip(),
                                     "cuisine": new_cuisine,
@@ -282,8 +302,8 @@ if action == "View All Places":
                                     "visited": new_visited
                                 })
                                 save_data(restaurants)
+                                st.session_state.restaurants = load_data()
                                 st.success(f"{new_name} saved!")
-                                st.balloons()
                                 del st.session_state[f"edit_mode_{global_idx}"]
                                 st.rerun()
 
@@ -307,19 +327,16 @@ elif action == "Add a Place":
             elif any(r["name"].lower() == name.lower().strip() for r in restaurants):
                 st.warning("Already exists!")
             else:
-                photo_paths = []
+                photo_urls = []
                 if photos:
-                    safe = "".join(c for c in name if c.isalnum() or c in " -_").replace(" ", "_")
                     for p in photos:
-                        ext = p.name.split(".")[-1].lower()
-                        fname = f"{safe}_{uuid.uuid4().hex[:8]}.{ext}"
-                        path = os.path.join(IMAGES_DIR, fname)
-                        with open(path, "wb") as f: f.write(p.getbuffer())
-                        photo_paths.append(path)
+                        url = upload_photo(p)
+                        if url:
+                            photo_urls.append(url)
                 new = {
                     "name": name.strip(), "cuisine": cuisine, "price": price, "location": location,
                     "address": address.strip(), "type": place_type, "favorite": False, "visited": visited,
-                    "photos": photo_paths, "reviews": [], "added_date": datetime.now().isoformat()
+                    "photos": photo_urls, "reviews": [], "added_date": datetime.now().isoformat()
                 }
                 if quick_notes.strip():
                     new["reviews"].append({
@@ -327,11 +344,13 @@ elif action == "Add a Place":
                         "reviewer": "You",
                         "date": datetime.now().strftime("%B %d, %Y")
                     })
-                restaurants.append(new)
-                save_data(restaurants)
-                st.success(f"{name} added!")
-                st.balloons()
-                st.rerun()
+                try:
+                    supabase.table("restaurants").insert(new).execute()
+                    st.session_state.restaurants = load_data()
+                    st.success(f"{name} added!")
+                    st.rerun()
+                except Exception as e:
+                    st.error(f"Failed to add place: {str(e)}")
 
 # ────────────────────────────── Random Pick with Balloons ──────────────────────────────
 else:
@@ -349,7 +368,6 @@ else:
             visited_filter = st.selectbox("Visited", VISITED_OPTIONS)
         with col2:
             location_filter = st.multiselect("Neighborhood", sorted({r["location"] for r in restaurants}))
-
         filtered = [r for r in restaurants
                     if (not only_fav or r.get("favorite"))
                     and (type_filter == "all" or r.get("type") == type_filter)
@@ -359,18 +377,14 @@ else:
                     and (visited_filter == "All" or
                          (visited_filter == "Visited Only" and r.get("visited")) or
                          (visited_filter == "Not Visited Yet" and not r.get("visited")))]
-
         st.write(f"**{len(filtered)} places** match")
-
         if not filtered:
             st.warning("No matches – try broader filters!")
         else:
             if st.button("🎲 Pick Random Place!", type="primary", use_container_width=True):
                 picked = random.choice(filtered)
                 st.session_state.last_pick = picked
-                st.balloons()  # Classic celebration!
                 st.rerun()
-
             if "last_pick" in st.session_state and st.session_state.last_pick in filtered:
                 c = st.session_state.last_pick
                 with st.container(border=True):
@@ -381,23 +395,27 @@ else:
                     st.write(f"{c['cuisine']} • {c['price']} • {c['location']}")
                     st.write(f"**Address:** {c.get('address','')}")
                     st.markdown(f"[📍 Google Maps]({google_maps_link(c.get('address',''), c['name'])})")
-
                     idx = restaurants.index(c)
-
                     col_fav, col_vis = st.columns(2)
                     with col_fav:
-                        st.button("❤️ Unfavorite" if c.get("favorite") else "❤️ Favorite",
-                                  key=f"rand_fav_{idx}", on_click=toggle_favorite, args=(idx,))
+                        if st.button("❤️ Unfavorite" if c.get("favorite") else "❤️ Favorite",
+                                     key=f"rand_fav_{idx}"):
+                            toggle_favorite(idx)
                     with col_vis:
-                        st.button("✅ Mark as Unvisited" if c.get("visited") else "✅ Mark as Visited",
-                                  key=f"rand_vis_{idx}", on_click=toggle_visited, args=(idx,))
-
+                        if st.button("✅ Mark as Unvisited" if c.get("visited") else "✅ Mark as Visited",
+                                     key=f"rand_vis_{idx}"):
+                            toggle_visited(idx)
                     if c.get("photos"):
                         st.markdown("### Photos")
                         cols = st.columns(3)
-                        for i, p in enumerate(c["photos"]):
-                            if os.path.exists(p): cols[i%3].image(p, use_column_width=True)
-
+                        for i, url in enumerate(c["photos"]):
+                            if url:
+                                try:
+                                    response = requests.get(url)
+                                    response.raise_for_status()
+                                    cols[i%3].image(response.content, use_column_width=True)
+                                except:
+                                    cols[i%3].write("Failed to load image")
                     if c["reviews"]:
                         st.markdown("### Notes")
                         for rev in c["reviews"]:
@@ -405,11 +423,9 @@ else:
                             st.write(f"_{rev['comment']}_")
                     else:
                         st.info("No notes yet!")
-
                     if st.button("🎲 Pick Again!", type="secondary", use_container_width=True):
                         picked = random.choice(filtered)
                         st.session_state.last_pick = picked
-                        st.balloons()
                         st.rerun()
             elif "last_pick" in st.session_state:
                 st.info("Previous pick no longer matches filters – pick again!")
