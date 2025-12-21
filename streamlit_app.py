@@ -61,7 +61,12 @@ st.markdown("<h1 style='text-align: center;'>🍽️ Chicago Restaurant/Bar Rand
 st.markdown("<p style='text-align: center;'>Add, favorite, and randomly pick Chicago eats & drinks! 🍸</p>", unsafe_allow_html=True)
 
 st.sidebar.header("Actions")
-action = st.sidebar.radio("What do you want to do?", ["View All Places", "Add a Place", "Random Pick (with filters)"])
+# Default to "View All Places" if we just added a new one
+default_action = "View All Places" if st.session_state.get("just_added", False) else "View All Places"
+action = st.sidebar.radio("What do you want to do?", 
+                          ["View All Places", "Add a Place", "Random Pick (with filters)"],
+                          index=["View All Places", "Add a Place", "Random Pick (with filters)"].index(default_action))
+
 st.sidebar.markdown("---")
 st.sidebar.caption("Built by Alan, made for us ❤️")
 
@@ -86,7 +91,6 @@ def delete_restaurant(index):
         paths_to_delete = []
         for url in r["images"]:
             try:
-                # Extract the file path from the public URL
                 parsed = urllib.parse.urlparse(url)
                 path = parsed.path
                 prefix = f"/storage/v1/object/public/{BUCKET_NAME}/"
@@ -154,6 +158,12 @@ def upload_images_to_supabase(uploaded_files, restaurant_name):
 
 # ────────────────────────────── View All Places ──────────────────────────────
 if action == "View All Places":
+    # Clear the just_added flag after showing the view
+    if st.session_state.get("just_added", False):
+        del st.session_state.just_added
+        # Optional: show a highlight message
+        st.success(f"✅ {st.session_state.get('last_added_name', 'New place')} successfully added!")
+
     st.header("All Places")
     st.caption(f"{len(restaurants)} place(s)")
     if not restaurants:
@@ -184,9 +194,13 @@ if action == "View All Places":
             visited = " ✅" if r.get("visited") else ""
             img_count = f" • {len(r.get('images', []))} photo{'s' if len(r.get('images', [])) > 1 else ''}" if r.get("images") else ""
             notes_count = f" • {len(r['reviews'])} note{'s' if len(r['reviews']) != 1 else ''}" if r["reviews"] else ""
-            with st.expander(f"{r['name']}{icon}{fav}{visited} • {r['cuisine']} • {r['price']} • {r['location']}{img_count}{notes_count}",
-                             expanded=(f"edit_mode_{global_idx}" in st.session_state)):
-               
+            # Highlight the newly added place
+            is_new = st.session_state.get("highlight_new_id") == r.get("id")
+            with st.expander(f"{'✨ NEW! ' if is_new else ''}{r['name']}{icon}{fav}{visited} • {r['cuisine']} • {r['price']} • {r['location']}{img_count}{notes_count}",
+                             expanded=is_new):
+                if is_new:
+                    del st.session_state.highlight_new_id  # Clear after showing
+
                 if r.get("images"):
                     cols = st.columns(min(3, len(r["images"])))
                     for img_url, col in zip(r["images"], cols):
@@ -227,6 +241,7 @@ if action == "View All Places":
                     else:
                         st.write("_No notes yet — be the first!_")
                 else:
+                    # ... (edit form unchanged for brevity - same as before)
                     st.subheader(f"Editing: {r['name']}")
                     with st.form(key=f"edit_form_{global_idx}"):
                         new_name = st.text_input("Name*", value=r["name"])
@@ -342,15 +357,23 @@ elif action == "Add a Place":
                         "date": datetime.now().strftime("%B %d, %Y")
                     })
                 try:
-                    supabase.table("restaurants").insert(new).execute()
+                    response = supabase.table("restaurants").insert(new).execute()
+                    # Get the newly inserted record's ID
+                    new_id = response.data[0]["id"] if response.data else None
+                    
                     st.session_state.restaurants = load_data()
-                    st.success(f"{name} added with {len(image_urls)} photo{'s' if len(image_urls)>1 else ''}!")
-                    st.rerun()
+                    st.session_state.just_added = True
+                    st.session_state.last_added_name = name.strip()
+                    if new_id:
+                        st.session_state.highlight_new_id = new_id
+                    
+                    st.rerun()  # This will switch to View All Places and highlight the new entry
                 except Exception as e:
                     st.error(f"Failed to add place: {str(e)}")
 
 # ────────────────────────────── Random Pick ──────────────────────────────
 else:
+    # ... (Random Pick section unchanged - same as previous version)
     st.header("🎲 Random Place Picker")
     if not restaurants:
         st.info("Add places first!")
