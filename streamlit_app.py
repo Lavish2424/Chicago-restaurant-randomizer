@@ -244,17 +244,16 @@ if action == "View All Places":
                         
                         st.write("**Current Photos**")
                         if r.get("images"):
+                            images_to_delete = []
                             for img_idx, img_url in enumerate(r["images"]):
-                                col_img, col_del = st.columns([3, 1])
+                                col_img, col_check = st.columns([3, 1])
                                 with col_img:
                                     st.image(img_url, width=200)
-                                with col_del:
-                                    if st.button("🗑️ Delete", key=f"del_img_{global_idx}_{img_idx}"):
-                                        delete_key = f"images_to_delete_{global_idx}"
-                                        if delete_key not in st.session_state:
-                                            st.session_state[delete_key] = []
-                                        if img_idx not in [x[1] for x in st.session_state[delete_key]]:
-                                            st.session_state[delete_key].append((img_url, img_idx))
+                                with col_check:
+                                    if st.checkbox("Delete", key=f"del_img_check_{global_idx}_{img_idx}"):
+                                        images_to_delete.append(img_idx)
+                            # Store selected deletions in session state
+                            st.session_state[f"images_to_delete_{global_idx}"] = images_to_delete
                         else:
                             st.caption("No photos yet")
                         
@@ -282,9 +281,8 @@ if action == "View All Places":
                         
                         if cancel_btn:
                             del st.session_state[f"edit_mode_{global_idx}"]
-                            delete_key = f"images_to_delete_{global_idx}"
-                            if delete_key in st.session_state:
-                                del st.session_state[delete_key]
+                            if f"images_to_delete_{global_idx}" in st.session_state:
+                                del st.session_state[f"images_to_delete_{global_idx}"]
                             st.rerun()
                         
                         if save_btn:
@@ -295,10 +293,10 @@ if action == "View All Places":
                             else:
                                 current_images = r.get("images", []).copy()
                                 
-                                # Handle image deletions
+                                # Handle image deletions (from checkboxes)
                                 delete_key = f"images_to_delete_{global_idx}"
-                                if delete_key in st.session_state:
-                                    for _, img_idx in sorted(st.session_state[delete_key], key=lambda x: x[1], reverse=True):
+                                if delete_key in st.session_state and st.session_state[delete_key]:
+                                    for img_idx in sorted(st.session_state[delete_key], reverse=True):
                                         deleted_url = current_images.pop(img_idx)
                                         try:
                                             parsed = urllib.parse.urlparse(deleted_url)
@@ -311,12 +309,12 @@ if action == "View All Places":
                                             st.warning(f"Could not delete image from storage: {str(e)}")
                                     del st.session_state[delete_key]
                                 
-                                # Add new images
+                                # Add new uploaded images
                                 if new_uploaded:
                                     new_urls = upload_images_to_supabase(new_uploaded, new_name)
                                     current_images.extend(new_urls)
                                 
-                                # Handle review deletions and new review
+                                # Handle review deletions and add new review
                                 for i in sorted(reviews_to_delete, reverse=True):
                                     del r["reviews"][i]
                                 if new_rev_comment.strip():
@@ -326,7 +324,7 @@ if action == "View All Places":
                                         "date": datetime.now().strftime("%B %d, %Y")
                                     })
                                 
-                                # Update restaurant data
+                                # Update restaurant fields
                                 r.update({
                                     "name": new_name.strip(),
                                     "cuisine": new_cuisine,
