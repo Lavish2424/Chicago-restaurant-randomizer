@@ -108,8 +108,9 @@ def delete_restaurant(index):
     del restaurants[index]
     st.session_state.restaurants = load_data()
     img_count = len(r.get("images", []))
-    st.success(f"🗑️ **{r['name']}** deleted!{f' ({img_count} photo{'s' if img_count != 1 else ''} removed)' if img_count else ''}")
+    st.success(f"🎉 **{name}** successfully added!{photo_text}")
     st.balloons()
+    st.write("🧪 TEST: If you see this, the success worked!")  # ← ADD THIS LINE
     st.rerun()
 
 def toggle_favorite(idx):
