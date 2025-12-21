@@ -61,7 +61,7 @@ st.markdown("<h1 style='text-align: center;'>🍽️ Chicago Restaurant/Bar Rand
 st.markdown("<p style='text-align: center;'>Add, favorite, and randomly pick Chicago eats & drinks! 🍸</p>", unsafe_allow_html=True)
 
 st.sidebar.header("Actions")
-action = st.sidebar.radio("What do you want to do?", ["View All Places", "Add a Place📍", "Random Pick🎲"])
+action = st.sidebar.radio("What do you want to do?", ["View All Places", "Add a Place", "Random Pick"])
 st.sidebar.markdown("---")
 st.sidebar.caption("Built by Alan, made for us ❤️")
 
