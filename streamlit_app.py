@@ -71,9 +71,9 @@ NEIGHBORHOODS = [
 ]
 
 CUISINES = [
-    "Chinese", "Italian", "American", "Mexican", "Japanese", "Indian",
-    "Thai", "French", "Korean", "Pizza", "Burgers", "Seafood",
-    "Steakhouse", "Bar Food", "Cocktails", "Other"
+    "Asian", "American", "Mexican", "Japanese", "Indian",
+    "Thai", "French", "Seafood",
+    "Steakhouse", "Cocktails", "Other"
 ]
 
 VISITED_OPTIONS = ["All", "Visited Only", "Not Visited Yet"]
