@@ -67,7 +67,7 @@ st.sidebar.caption("Built by Alan, made for us ❤️")
 
 NEIGHBORHOODS = [
     "Fulton Market", "River North", "Gold Coast", "South Loop",
-    "Chinatown", "Pilsen", "West Town"
+    "Chinatown", "Pilsen", "West Town", "West Loop"
 ]
 
 CUISINES = [
