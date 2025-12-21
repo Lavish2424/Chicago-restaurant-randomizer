@@ -62,12 +62,17 @@ st.markdown("<p style='text-align: center;'>Add, favorite, and randomly pick Chi
 
 st.sidebar.header("Actions")
 
-# Allow programmatic switching to another tab (used after adding a place)
-if "sidebar_action" in st.session_state:
-    action = st.session_state.sidebar_action
+# === FIXED SIDEBAR LOGIC ===
+# Check if we need to programmatically switch tabs
+if "force_tab" in st.session_state:
+    action = st.session_state.force_tab
+    # Clean up immediately so sidebar radio renders normally next time
+    del st.session_state.force_tab
 else:
-    action = st.sidebar.radio("What do you want to do?", 
-                              ["View All Places", "Add a Place", "Random Pick (with filters)"])
+    action = st.sidebar.radio(
+        "What do you want to do?",
+        ["View All Places", "Add a Place", "Random Pick (with filters)"]
+    )
 
 st.sidebar.markdown("---")
 st.sidebar.caption("Built by Alan, made for us ❤️")
@@ -93,6 +98,7 @@ def delete_restaurant(index):
         paths_to_delete = []
         for url in r["images"]:
             try:
+                # Extract the file path from the public URL
                 parsed = urllib.parse.urlparse(url)
                 path = parsed.path
                 prefix = f"/storage/v1/object/public/{BUCKET_NAME}/"
@@ -192,7 +198,7 @@ if action == "View All Places":
             notes_count = f" • {len(r['reviews'])} note{'s' if len(r['reviews']) != 1 else ''}" if r["reviews"] else ""
             with st.expander(f"{r['name']}{icon}{fav}{visited} • {r['cuisine']} • {r['price']} • {r['location']}{img_count}{notes_count}",
                              expanded=(f"edit_mode_{global_idx}" in st.session_state)):
-                # ... (rest of View All Places code remains unchanged)
+              
                 if r.get("images"):
                     cols = st.columns(min(3, len(r["images"])))
                     for img_url, col in zip(r["images"], cols):
@@ -233,27 +239,103 @@ if action == "View All Places":
                     else:
                         st.write("_No notes yet — be the first!_")
                 else:
-                    # ... (editing form remains unchanged – omitted for brevity)
-                    pass  # Keep your existing edit form code here
+                    st.subheader(f"Editing: {r['name']}")
+                    with st.form(key=f"edit_form_{global_idx}"):
+                        new_name = st.text_input("Name*", value=r["name"])
+                        new_cuisine = st.selectbox("Cuisine/Style*", CUISINES, index=CUISINES.index(r["cuisine"]))
+                        new_price = st.selectbox("Price*", ["$", "$$", "$$$", "$$$$"], index=["$", "$$", "$$$", "$$$$"].index(r["price"]))
+                        new_location = st.selectbox("Neighborhood*", NEIGHBORHOODS, index=NEIGHBORHOODS.index(r["location"]) if r["location"] in NEIGHBORHOODS else 0)
+                        new_address = st.text_input("Address*", value=r.get("address", ""))
+                        new_type = st.selectbox("Type*", ["restaurant", "cocktail_bar"],
+                                                format_func=lambda x: "Restaurant 🍽️" if x=="restaurant" else "Cocktail Bar 🍸",
+                                                index=0 if r.get("type")=="restaurant" else 1)
+                        new_visited = st.checkbox("✅ I've already visited", value=r.get("visited", False))
+                        st.write("**Current Photos**")
+                        if r.get("images"):
+                            for img_url in r["images"]:
+                                st.image(img_url, width=200)
+                        st.write("**Upload New Photos**")
+                        new_uploaded = st.file_uploader("Add more images", type=["png", "jpg", "jpeg", "webp"], accept_multiple_files=True, key=f"upload_edit_{global_idx}")
+                        st.write("**Notes**")
+                        reviews_to_delete = []
+                        for i, rev in enumerate(r["reviews"]):
+                            col_text, col_del = st.columns([6, 1])
+                            with col_text:
+                                new_comment = st.text_area("Comment", value=rev["comment"], height=80, key=f"com_{global_idx}_{i}")
+                            with col_del:
+                                if st.checkbox("Delete", key=f"del_rev_{global_idx}_{i}"):
+                                    reviews_to_delete.append(i)
+                            rev["comment"] = new_comment
+                        st.write("Add new note (optional)")
+                        new_rev_comment = st.text_area("Comment", height=80, key=f"new_rev_{global_idx}")
+                        col_save, col_cancel = st.columns(2)
+                        with col_save:
+                            save_btn = st.form_submit_button("Save Changes", type="primary")
+                        with col_cancel:
+                            cancel_btn = st.form_submit_button("Cancel")
+                        if cancel_btn:
+                            del st.session_state[f"edit_mode_{global_idx}"]
+                            st.rerun()
+                        if save_btn:
+                            if not all([new_name.strip(), new_address.strip()]):
+                                st.error("Name and address required")
+                            elif new_name.lower().strip() != r["name"].lower() and any(e["name"].lower() == new_name.lower().strip() for e in restaurants if e != r):
+                                st.warning("Name already exists!")
+                            else:
+                                current_images = r.get("images", [])
+                                if new_uploaded:
+                                    new_urls = upload_images_to_supabase(new_uploaded, new_name)
+                                    current_images.extend(new_urls)
+                                for i in sorted(reviews_to_delete, reverse=True):
+                                    del r["reviews"][i]
+                                if new_rev_comment.strip():
+                                    r["reviews"].append({
+                                        "comment": new_rev_comment.strip(),
+                                        "reviewer": "You",
+                                        "date": datetime.now().strftime("%B %d, %Y")
+                                    })
+                                r.update({
+                                    "name": new_name.strip(),
+                                    "cuisine": new_cuisine,
+                                    "price": new_price,
+                                    "location": new_location,
+                                    "address": new_address.strip(),
+                                    "type": new_type,
+                                    "visited": new_visited,
+                                    "images": current_images
+                                })
+                                save_data(restaurants)
+                                st.session_state.restaurants = load_data()
+                                st.success(f"{new_name} saved!")
+                                del st.session_state[f"edit_mode_{global_idx}"]
+                                st.rerun()
 
 # ────────────────────────────── Add a Place ──────────────────────────────
 elif action == "Add a Place":
     st.header("Add a New Place")
     
-    # If we just successfully added a place and haven't clicked the button yet
+    # Show success message if we just added a place
     if "just_added" in st.session_state:
         name = st.session_state.just_added["name"]
         img_count = st.session_state.just_added["img_count"]
-        st.success(f"🎉 **{name}** added successfully with {img_count} photo{'s' if img_count != 1 else '' if img_count > 0 else 'no photos'}!")
-        
+        photo_text = f"{img_count} photo{'s' if img_count != 1 else ''}" if img_count > 0 else "no photos"
+        st.success(f"🎉 **{name}** added successfully with {photo_text}!")
+
         if st.button("👀 View All Places →", type="primary", use_container_width=True):
-            st.session_state.sidebar_action = "View All Places"
-            # Clean up temporary state
+            # Programmatically switch to View All Places
+            st.session_state.force_tab = "View All Places"
+            # Clean up success message state
             del st.session_state.just_added
             st.rerun()
-        
-        st.stop()  # Don't show the form again below
-    
+
+        # Optional: add a secondary button to add another place
+        if st.button("➕ Add Another Place"):
+            del st.session_state.just_added
+            st.rerun()
+
+        st.stop()  # Don't show the form below the success message
+
+    # Normal add form
     with st.form("add_place_form"):
         name = st.text_input("Name*")
         cuisine = st.selectbox("Cuisine/Style*", CUISINES)
@@ -265,9 +347,9 @@ elif action == "Add a Place":
         visited = st.checkbox("✅ I've already visited")
         uploaded_images = st.file_uploader("Upload photos", type=["png", "jpg", "jpeg", "webp"], accept_multiple_files=True)
         quick_notes = st.text_area("Quick notes (optional)", height=100)
-        
+
         submitted = st.form_submit_button("Add Place", type="primary")
-        
+
         if submitted:
             if not all([name.strip(), address.strip()]):
                 st.error("Name and address required")
@@ -278,7 +360,7 @@ elif action == "Add a Place":
                 if uploaded_images:
                     with st.spinner("Uploading images..."):
                         image_urls = upload_images_to_supabase(uploaded_images, name)
-                
+
                 new = {
                     "name": name.strip(),
                     "cuisine": cuisine,
@@ -298,18 +380,18 @@ elif action == "Add a Place":
                         "reviewer": "You",
                         "date": datetime.now().strftime("%B %d, %Y")
                     })
-                
+
                 try:
                     supabase.table("restaurants").insert(new).execute()
                     st.session_state.restaurants = load_data()
-                    
-                    # Store info for success message on rerun
+
+                    # Store success info
                     st.session_state.just_added = {
                         "name": name.strip(),
                         "img_count": len(image_urls)
                     }
                     st.rerun()
-                    
+
                 except Exception as e:
                     st.error(f"Failed to add place: {str(e)}")
 
