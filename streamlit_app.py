@@ -81,7 +81,6 @@ VISITED_OPTIONS = ["All", "Visited Only", "Not Visited Yet"]
 def delete_restaurant(index):
     r = restaurants[index]
   
-    # Delete associated images from Supabase Storage if any
     if r.get("images"):
         paths_to_delete = []
         for url in r["images"]:
@@ -101,7 +100,6 @@ def delete_restaurant(index):
             except Exception as e:
                 st.error(f"Failed to delete some images from storage: {str(e)}")
   
-    # Delete the row from the database
     if "id" in r:
         supabase.table("restaurants").delete().eq("id", r["id"]).execute()
   
@@ -128,7 +126,6 @@ def google_maps_link(address, name=""):
     return f"https://www.google.com/maps/search/?api=1&query={urllib.parse.quote(query)}"
 
 def upload_images_to_supabase(uploaded_files, restaurant_name):
-    """Upload images and return list of public URLs"""
     urls = []
     sanitized_name = "".join(c for c in restaurant_name if c.isalnum() or c in " -_").rstrip()
     for i, file in enumerate(uploaded_files):
@@ -186,7 +183,6 @@ if action == "View All Places":
             with st.expander(f"{r['name']}{icon}{fav}{visited} • {r['cuisine']} • {r['price']} • {r['location']}{img_count}{notes_count}",
                              expanded=(f"edit_mode_{global_idx}" in st.session_state)):
                
-                # DISPLAY ALL IMAGES IN ROWS OF 3
                 if r.get("images"):
                     for i in range(0, len(r["images"]), 3):
                         cols = st.columns(3)
@@ -205,12 +201,19 @@ if action == "View All Places":
                         if st.button("❤️ Unfavorite" if r.get("favorite") else "❤️ Favorite",
                                      key=f"fav_{global_idx}"):
                             toggle_favorite(global_idx)
-                        # Visited toggle button - now in the main view, just like favorite
+                        
+                        # Visited button - now uses secondary when visited (no red background)
                         if st.button("✅ Mark as Unvisited" if r.get("visited") else "✅ Mark as Visited",
                                      key=f"vis_{global_idx}",
-                                     type="secondary" if not r.get("visited") else "primary"):
+                                     type="secondary"):  # Always secondary = clean gray look
                             toggle_visited(global_idx)
-                        # Edit and Delete
+
+                        # Alternative: highlight when visited (blue instead of red)
+                        # if st.button("✅ Mark as Unvisited" if r.get("visited") else "✅ Mark as Visited",
+                        #              key=f"vis_{global_idx}",
+                        #              type="primary" if r.get("visited") else "secondary"):
+                        #     toggle_visited(global_idx)
+                        
                         if st.button("Edit ✏️", key=f"edit_{global_idx}"):
                             st.session_state[f"edit_mode_{global_idx}"] = True
                             st.rerun()
@@ -298,7 +301,6 @@ if action == "View All Places":
                             else:
                                 current_images = r.get("images", []).copy()
                                
-                                # Handle image deletions
                                 delete_key = f"images_to_delete_{global_idx}"
                                 if delete_key in st.session_state and st.session_state[delete_key]:
                                     for img_idx in sorted(st.session_state[delete_key], reverse=True):
@@ -314,12 +316,10 @@ if action == "View All Places":
                                             st.warning(f"Could not delete image from storage: {str(e)}")
                                     del st.session_state[delete_key]
                                
-                                # Add new uploaded images
                                 if new_uploaded:
                                     new_urls = upload_images_to_supabase(new_uploaded, new_name)
                                     current_images.extend(new_urls)
                                
-                                # Handle review deletions and add new review
                                 for i in sorted(reviews_to_delete, reverse=True):
                                     del r["reviews"][i]
                                 if new_rev_comment.strip():
@@ -329,7 +329,6 @@ if action == "View All Places":
                                         "date": datetime.now().strftime("%B %d, %Y")
                                     })
                                
-                                # Update restaurant fields
                                 r.update({
                                     "name": new_name.strip(),
                                     "cuisine": new_cuisine,
@@ -438,7 +437,6 @@ else:
                     vis = " ✅ Visited" if c.get("visited") else ""
                     st.markdown(f"# {c['name']}{tag}{fav}{vis}")
                    
-                    # DISPLAY ALL IMAGES IN ROWS OF 3
                     if c.get("images"):
                         for i in range(0, len(c["images"]), 3):
                             cols = st.columns(3)
@@ -460,7 +458,8 @@ else:
                             toggle_favorite(idx)
                     with col_vis:
                         if st.button("✅ Mark as Unvisited" if c.get("visited") else "✅ Mark as Visited",
-                                     key=f"rand_vis_{idx}"):
+                                     key=f"rand_vis_{idx}",
+                                     type="secondary"):  # Also updated here for consistency
                             toggle_visited(idx)
                     if c["reviews"]:
                         st.markdown("### Notes")
