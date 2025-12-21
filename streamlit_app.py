@@ -55,21 +55,13 @@ def save_data(data):
 if "restaurants" not in st.session_state:
     st.session_state.restaurants = load_data()
 
-# Initialize current_action in session state
-if "current_action" not in st.session_state:
-    st.session_state.current_action = "View All Places"
-
 restaurants = st.session_state.restaurants
 
 st.markdown("<h1 style='text-align: center;'>🍽️ Chicago Restaurant/Bar Randomizer</h1>", unsafe_allow_html=True)
 st.markdown("<p style='text-align: center;'>Add, favorite, and randomly pick Chicago eats & drinks! 🍸</p>", unsafe_allow_html=True)
 
 st.sidebar.header("Actions")
-action = st.sidebar.radio(
-    "What do you want to do?",
-    ["View All Places", "Add a Place", "Random Pick (with filters)"],
-    key="current_action"  # Binds to session_state
-)
+action = st.sidebar.radio("What do you want to do?", ["View All Places", "Add a Place", "Random Pick (with filters)"])
 st.sidebar.markdown("---")
 st.sidebar.caption("Built by Alan, made for us ❤️")
 
@@ -94,6 +86,7 @@ def delete_restaurant(index):
         paths_to_delete = []
         for url in r["images"]:
             try:
+                # Extract the file path from the public URL
                 parsed = urllib.parse.urlparse(url)
                 path = parsed.path
                 prefix = f"/storage/v1/object/public/{BUCKET_NAME}/"
@@ -161,11 +154,6 @@ def upload_images_to_supabase(uploaded_files, restaurant_name):
 
 # ────────────────────────────── View All Places ──────────────────────────────
 if action == "View All Places":
-    # Show success message and highlight new place if just added
-    if st.session_state.get("last_added_name"):
-        st.success(f"✅ {st.session_state.last_added_name} successfully added!")
-        del st.session_state.last_added_name
-
     st.header("All Places")
     st.caption(f"{len(restaurants)} place(s)")
     if not restaurants:
@@ -196,12 +184,9 @@ if action == "View All Places":
             visited = " ✅" if r.get("visited") else ""
             img_count = f" • {len(r.get('images', []))} photo{'s' if len(r.get('images', [])) > 1 else ''}" if r.get("images") else ""
             notes_count = f" • {len(r['reviews'])} note{'s' if len(r['reviews']) != 1 else ''}" if r["reviews"] else ""
-            is_new = st.session_state.get("highlight_new_id") == r.get("id")
-            with st.expander(f"{'✨ NEW! ' if is_new else ''}{r['name']}{icon}{fav}{visited} • {r['cuisine']} • {r['price']} • {r['location']}{img_count}{notes_count}",
-                             expanded=is_new):
-                if is_new:
-                    del st.session_state.highlight_new_id
-
+            with st.expander(f"{r['name']}{icon}{fav}{visited} • {r['cuisine']} • {r['price']} • {r['location']}{img_count}{notes_count}",
+                             expanded=(f"edit_mode_{global_idx}" in st.session_state)):
+               
                 if r.get("images"):
                     cols = st.columns(min(3, len(r["images"])))
                     for img_url, col in zip(r["images"], cols):
@@ -357,15 +342,9 @@ elif action == "Add a Place":
                         "date": datetime.now().strftime("%B %d, %Y")
                     })
                 try:
-                    response = supabase.table("restaurants").insert(new).execute()
-                    new_id = response.data[0]["id"] if response.data else None
-                    
+                    supabase.table("restaurants").insert(new).execute()
                     st.session_state.restaurants = load_data()
-                    st.session_state.current_action = "View All Places"  # Force switch
-                    st.session_state.last_added_name = name.strip()
-                    if new_id:
-                        st.session_state.highlight_new_id = new_id
-                    
+                    st.success(f"{name} added with {len(image_urls)} photo{'s' if len(image_urls)>1 else ''}!")
                     st.rerun()
                 except Exception as e:
                     st.error(f"Failed to add place: {str(e)}")
