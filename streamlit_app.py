@@ -8,13 +8,21 @@ import os
 # ==================== SUPABASE CLIENT ====================
 def get_supabase_client() -> Client:
     client = create_client(st.secrets["SUPABASE_URL"], st.secrets["SUPABASE_ANON_KEY"])
-    if "access_token" in st.session_state:
-        client.auth.set_session(st.session_state.access_token)
+    # Only set session if we have a valid access token
+    if "access_token" in st.session_state and st.session_state.access_token:
+        try:
+            client.auth.set_session(st.session_state.access_token)
+            # Bonus: Refresh session if possible to keep user logged in longer
+            if "refresh_token" in st.session_state and st.session_state.refresh_token:
+                client.auth.refresh_session(st.session_state.refresh_token)
+        except Exception as e:
+            st.error(f"Session error: {e}")
+            # On error, clear bad session
+            st.session_state.pop("access_token", None)
+            st.session_state.pop("refresh_token", None)
     return client
 
-supabase = get_supabase_client()
-
-BUCKET_NAME = "restaurant-images"  # Must be a public bucket
+BUCKET_NAME = "restaurant-images"  # Public bucket
 
 # ==================== AUTHENTICATION ====================
 st.sidebar.header("🔐 User Account")
@@ -22,17 +30,18 @@ st.sidebar.header("🔐 User Account")
 if "user" not in st.session_state:
     st.session_state.user = None
     st.session_state.access_token = None
+    st.session_state.refresh_token = None
 
 if st.session_state.user:
     st.sidebar.write(f"Logged in as: **{st.session_state.user.email}**")
     if st.sidebar.button("Logout"):
         st.session_state.user = None
         st.session_state.access_token = None
-        supabase.auth.sign_out()
+        st.session_state.refresh_token = None
         st.success("Logged out successfully!")
         st.rerun()
 else:
-    st.sidebar.info("Log in to add, edit, or delete places and upload photos.")
+    st.sidebar.info("Log in to add, edit, delete places, and upload photos.")
     with st.sidebar.form("login_form"):
         email = st.text_input("Email")
         password = st.text_input("Password", type="password")
@@ -43,6 +52,7 @@ else:
                 st.error("Please enter a valid email and password.")
             else:
                 with st.spinner("Processing..."):
+                    supabase = get_supabase_client()
                     try:
                         # Try to log in
                         res = supabase.auth.sign_in_with_password({"email": email, "password": password})
@@ -56,10 +66,10 @@ else:
                             st.error(f"Sign up failed: {str(e)}")
                             st.stop()
 
-                    if res.user:
+                    if res.user and res.session:
                         st.session_state.user = res.user
                         st.session_state.access_token = res.session.access_token
-                        supabase.auth.set_session(res.session.access_token)
+                        st.session_state.refresh_token = res.session.refresh_token  # Bonus: persist refresh
                         st.success("Logged in successfully!")
                         st.rerun()
 
@@ -72,13 +82,13 @@ action = st.sidebar.radio("What do you want to do?", ["View All Places", "Add a 
 st.sidebar.markdown("---")
 st.sidebar.caption("Built by Alan, made for us ❤️")
 
-# Block modification actions if not logged in
 if action in ["Add a Place", "View All Places"] and not st.session_state.user:
     st.warning("🔒 Please log in from the sidebar to add, edit, or delete places.")
     st.stop()
 
 # ==================== DATA FUNCTIONS ====================
 def load_data():
+    supabase = get_supabase_client()
     try:
         response = supabase.table("restaurants").select("*").order("added_date", desc=True).execute()
         data = response.data
@@ -95,6 +105,7 @@ def load_data():
         return []
 
 def save_data(data):
+    supabase = get_supabase_client()
     try:
         for place in data:
             place_id = place.get("id")
@@ -119,6 +130,16 @@ def save_data(data):
     except Exception as e:
         st.error(f"Error saving data: {str(e)}")
 
+def delete_restaurant(index):
+    supabase = get_supabase_client()
+    r = restaurants[index]
+    if "id" in r:
+        supabase.table("restaurants").delete().eq("id", r["id"]).execute()
+    del restaurants[index]
+    st.session_state.restaurants = load_data()
+    st.success(f"{r['name']} deleted!")
+    st.rerun()
+
 if "restaurants" not in st.session_state:
     st.session_state.restaurants = load_data()
 
@@ -127,15 +148,6 @@ restaurants = st.session_state.restaurants
 NEIGHBORHOODS = ["Fulton Market", "River North", "Gold Coast", "South Loop", "Chinatown", "Pilsen", "West Town"]
 CUISINES = ["Chinese", "Italian", "American", "Mexican", "Japanese", "Indian", "Thai", "French", "Korean", "Pizza", "Burgers", "Seafood", "Steakhouse", "Bar Food", "Cocktails", "Other"]
 VISITED_OPTIONS = ["All", "Visited Only", "Not Visited Yet"]
-
-def delete_restaurant(index):
-    r = restaurants[index]
-    if "id" in r:
-        supabase.table("restaurants").delete().eq("id", r["id"]).execute()
-    del restaurants[index]
-    st.session_state.restaurants = load_data()
-    st.success(f"{r['name']} deleted!")
-    st.rerun()
 
 def toggle_favorite(idx):
     restaurants[idx]["favorite"] = not restaurants[idx].get("favorite", False)
@@ -151,9 +163,10 @@ def toggle_visited(idx):
 
 def google_maps_link(address, name=""):
     query = f"{name}, {address}" if name else address
-    return f"https://www.google.com/maps/search/?api=1&query={urllib.parse.quote(query)}"
+    return f"https://www/maps.google.com/maps/search/?api=1&query={urllib.parse.quote(query)}"
 
 def upload_images_to_supabase(uploaded_files, restaurant_name):
+    supabase = get_supabase_client()
     urls = []
     sanitized_name = "".join(c for c in restaurant_name if c.isalnum() or c in " -_").rstrip()
     for i, file in enumerate(uploaded_files):
@@ -372,6 +385,7 @@ elif action == "Add a Place":
                     })
 
                 try:
+                    supabase = get_supabase_client()
                     supabase.table("restaurants").insert(new).execute()
                     st.session_state.restaurants = load_data()
                     st.success(f"{name} added with {len(image_urls)} photo{'s' if len(image_urls)>1 else ''}!")
