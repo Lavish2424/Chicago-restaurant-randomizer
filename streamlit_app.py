@@ -80,13 +80,12 @@ VISITED_OPTIONS = ["All", "Visited Only", "Not Visited Yet"]
 
 def delete_restaurant(index):
     r = restaurants[index]
-    
+   
     # Delete associated images from Supabase Storage if any
     if r.get("images"):
         paths_to_delete = []
         for url in r["images"]:
             try:
-                # Extract the file path from the public URL
                 parsed = urllib.parse.urlparse(url)
                 path = parsed.path
                 prefix = f"/storage/v1/object/public/{BUCKET_NAME}/"
@@ -95,21 +94,22 @@ def delete_restaurant(index):
                     paths_to_delete.append(file_path)
             except Exception as e:
                 st.error(f"Error parsing image URL {url}: {str(e)}")
-        
+       
         if paths_to_delete:
             try:
                 supabase.storage.from_(BUCKET_NAME).remove(paths_to_delete)
             except Exception as e:
                 st.error(f"Failed to delete some images from storage: {str(e)}")
-    
+   
     # Delete the row from the database
     if "id" in r:
         supabase.table("restaurants").delete().eq("id", r["id"]).execute()
-    
+   
     del restaurants[index]
     st.session_state.restaurants = load_data()
     img_count = len(r.get("images", []))
-    st.success(f"{r['name']} deleted!{f' ({img_count} photo{'s' if img_count != 1 else ''} removed from storage)' if img_count else ''}")
+    st.success(f"🗑️ **{r['name']}** deleted!{f' ({img_count} photo{'s' if img_count != 1 else ''} removed)' if img_count else ''}")
+    st.balloons()
     st.rerun()
 
 def toggle_favorite(idx):
@@ -168,7 +168,7 @@ if action == "View All Places":
         if search_term:
             lower = search_term.lower()
             filtered = [r for r in filtered if lower in r["name"].lower() or
-                        lower in r["cuisine"].lower() or lower in r["location"].lower() or
+                        lower in r["cuisine"].lower() or lower in r.get("location", "").lower() or
                         lower in r.get("address", "").lower()]
         if sort_option == "A-Z (Name)":
             sorted_places = sorted(filtered, key=lambda x: x["name"].lower())
@@ -186,7 +186,7 @@ if action == "View All Places":
             notes_count = f" • {len(r['reviews'])} note{'s' if len(r['reviews']) != 1 else ''}" if r["reviews"] else ""
             with st.expander(f"{r['name']}{icon}{fav}{visited} • {r['cuisine']} • {r['price']} • {r['location']}{img_count}{notes_count}",
                              expanded=(f"edit_mode_{global_idx}" in st.session_state)):
-               
+              
                 if r.get("images"):
                     cols = st.columns(min(3, len(r["images"])))
                     for img_url, col in zip(r["images"], cols):
@@ -294,7 +294,12 @@ if action == "View All Places":
                                 })
                                 save_data(restaurants)
                                 st.session_state.restaurants = load_data()
-                                st.success(f"{new_name} saved!")
+                                
+                                # Celebratory success message
+                                img_count = len(new_uploaded) if new_uploaded else 0
+                                photo_text = f" and {img_count} new photo{'s' if img_count != 1 else ''}" if img_count else ""
+                                st.success(f"🎉 **{new_name}** successfully updated!{photo_text}")
+                                st.balloons()
                                 del st.session_state[f"edit_mode_{global_idx}"]
                                 st.rerun()
 
@@ -312,42 +317,56 @@ elif action == "Add a Place":
         visited = st.checkbox("✅ I've already visited")
         uploaded_images = st.file_uploader("Upload photos", type=["png", "jpg", "jpeg", "webp"], accept_multiple_files=True)
         quick_notes = st.text_area("Quick notes (optional)", height=100)
-        if st.form_submit_button("Add Place", type="primary"):
-            if not all([name.strip(), address.strip()]):
-                st.error("Name and address required")
-            elif any(r["name"].lower() == name.lower().strip() for r in restaurants):
-                st.warning("Already exists!")
-            else:
-                image_urls = []
-                if uploaded_images:
-                    with st.spinner("Uploading images..."):
-                        image_urls = upload_images_to_supabase(uploaded_images, name)
-                new = {
-                    "name": name.strip(),
-                    "cuisine": cuisine,
-                    "price": price,
-                    "location": location,
-                    "address": address.strip(),
-                    "type": place_type,
-                    "favorite": False,
-                    "visited": visited,
-                    "reviews": [],
-                    "images": image_urls,
-                    "added_date": datetime.now().isoformat()
-                }
-                if quick_notes.strip():
-                    new["reviews"].append({
-                        "comment": quick_notes.strip(),
-                        "reviewer": "You",
-                        "date": datetime.now().strftime("%B %d, %Y")
-                    })
-                try:
-                    supabase.table("restaurants").insert(new).execute()
+
+        submitted = st.form_submit_button("Add Place", type="primary")
+
+        if submitted:
+            if not name.strip() or not address.strip():
+                st.error("Name and address are required.")
+                st.stop()
+
+            if any(r["name"].lower() == name.lower().strip() for r in restaurants):
+                st.warning("A place with this name already exists!")
+                st.stop()
+
+            image_urls = []
+            if uploaded_images:
+                with st.spinner("Uploading photos…"):
+                    image_urls = upload_images_to_supabase(uploaded_images, name)
+
+            new_place = {
+                "name": name.strip(),
+                "cuisine": cuisine,
+                "price": price,
+                "location": location,
+                "address": address.strip(),
+                "type": place_type,
+                "favorite": False,
+                "visited": visited,
+                "reviews": [],
+                "images": image_urls,
+                "added_date": datetime.now().isoformat()
+            }
+            if quick_notes.strip():
+                new_place["reviews"].append({
+                    "comment": quick_notes.strip(),
+                    "reviewer": "You",
+                    "date": datetime.now().strftime("%B %d, %Y")
+                })
+
+            try:
+                response = supabase.table("restaurants").insert(new_place).execute()
+                if response.data:
                     st.session_state.restaurants = load_data()
-                    st.success(f"{name} added with {len(image_urls)} photo{'s' if len(image_urls)>1 else ''}!")
+                    img_count = len(image_urls)
+                    photo_text = f" with {img_count} photo{'s' if img_count != 1 else ''}" if img_count else ""
+                    st.success(f"🎉 **{name}** successfully added!{photo_text}")
+                    st.balloons()
                     st.rerun()
-                except Exception as e:
-                    st.error(f"Failed to add place: {str(e)}")
+                else:
+                    st.error("Insert failed – no data returned. Check your table policies.")
+            except Exception as e:
+                st.error(f"Failed to save to database: {str(e)}")
 
 # ────────────────────────────── Random Pick ──────────────────────────────
 else:
