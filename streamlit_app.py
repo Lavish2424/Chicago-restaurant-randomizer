@@ -71,7 +71,7 @@ NEIGHBORHOODS = [
 ]
 
 CUISINES = [
-    "Asian", "American", "Mexican", "Japanese", "Indian",
+    "American", "Asian", "Mexican", "Japanese", "Italian", "Indian",
     "Thai", "French", "Seafood",
     "Steakhouse", "Cocktails", "Other"
 ]
