@@ -58,7 +58,7 @@ if "restaurants" not in st.session_state:
 restaurants = st.session_state.restaurants
 
 st.markdown("<h1 style='text-align: center;'>🍽️🍸 Chicago Restaurant/Bar Randomizer</h1>", unsafe_allow_html=True)
-st.markdown("<p style='text-align: center;'>Add, view, and randomly pick Chicago eats & drinks! 🍸</p>", unsafe_allow_html=True)
+st.markdown("<p style='text-align: center;'>Add, view, and randomly pick Chicago eats & drinks! </p>", unsafe_allow_html=True)
 
 st.sidebar.header("Actions")
 action = st.sidebar.radio("What do you want to do?", ["View All Places", "Add a Place", "Random Pick"])
