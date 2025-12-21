@@ -80,7 +80,7 @@ VISITED_OPTIONS = ["All", "Visited Only", "Not Visited Yet"]
 
 def delete_restaurant(index):
     r = restaurants[index]
-   
+  
     # Delete associated images from Supabase Storage if any
     if r.get("images"):
         paths_to_delete = []
@@ -94,17 +94,17 @@ def delete_restaurant(index):
                     paths_to_delete.append(file_path)
             except Exception as e:
                 st.error(f"Error parsing image URL {url}: {str(e)}")
-       
+      
         if paths_to_delete:
             try:
                 supabase.storage.from_(BUCKET_NAME).remove(paths_to_delete)
             except Exception as e:
                 st.error(f"Failed to delete some images from storage: {str(e)}")
-   
+  
     # Delete the row from the database
     if "id" in r:
         supabase.table("restaurants").delete().eq("id", r["id"]).execute()
-   
+  
     del restaurants[index]
     st.session_state.restaurants = load_data()
     img_count = len(r.get("images", []))
@@ -185,7 +185,7 @@ if action == "View All Places":
             notes_count = f" • {len(r['reviews'])} note{'s' if len(r['reviews']) != 1 else ''}" if r["reviews"] else ""
             with st.expander(f"{r['name']}{icon}{fav}{visited} • {r['cuisine']} • {r['price']} • {r['location']}{img_count}{notes_count}",
                              expanded=(f"edit_mode_{global_idx}" in st.session_state)):
-                
+               
                 # DISPLAY ALL IMAGES IN ROWS OF 3
                 if r.get("images"):
                     for i in range(0, len(r["images"]), 3):
@@ -194,7 +194,7 @@ if action == "View All Places":
                             if i + j < len(r["images"]):
                                 with col:
                                     st.image(r["images"][i + j], use_column_width=True)
-                
+               
                 if f"edit_mode_{global_idx}" not in st.session_state:
                     col1, col2 = st.columns([3, 1])
                     with col1:
@@ -240,8 +240,22 @@ if action == "View All Places":
                         new_type = st.selectbox("Type*", ["restaurant", "cocktail_bar"],
                                                 format_func=lambda x: "Restaurant 🍽️" if x=="restaurant" else "Cocktail Bar 🍸",
                                                 index=0 if r.get("type")=="restaurant" else 1)
-                        new_visited = st.checkbox("✅ I've already visited", value=r.get("visited", False))
-                        
+
+                        # NEW TOGGLE BUTTON FOR VISITED
+                        st.markdown("**Visited Status**")
+                        col_vis_btn, col_vis_info = st.columns([2, 5])
+                        with col_vis_btn:
+                            if st.button(
+                                "✅ Mark as Visited" if not r.get("visited", False) else "✅ Mark as Unvisited",
+                                key=f"toggle_visited_{global_idx}",
+                                use_container_width=True,
+                                type="primary" if r.get("visited", False) else "secondary"
+                            ):
+                                r["visited"] = not r.get("visited", False)
+                                st.rerun()
+                        with col_vis_info:
+                            st.caption("I've already visited this place" if r.get("visited", False) else "Not visited yet")
+
                         st.write("**Current Photos**")
                         if r.get("images"):
                             images_to_delete = []
@@ -252,14 +266,13 @@ if action == "View All Places":
                                 with col_check:
                                     if st.checkbox("Delete", key=f"del_img_check_{global_idx}_{img_idx}"):
                                         images_to_delete.append(img_idx)
-                            # Store selected deletions in session state
                             st.session_state[f"images_to_delete_{global_idx}"] = images_to_delete
                         else:
                             st.caption("No photos yet")
-                        
+                       
                         st.write("**Upload New Photos**")
                         new_uploaded = st.file_uploader("Add more images", type=["png", "jpg", "jpeg", "webp"], accept_multiple_files=True, key=f"upload_edit_{global_idx}")
-                        
+                       
                         st.write("**Notes**")
                         reviews_to_delete = []
                         for i, rev in enumerate(r["reviews"]):
@@ -272,19 +285,19 @@ if action == "View All Places":
                             rev["comment"] = new_comment
                         st.write("Add new note (optional)")
                         new_rev_comment = st.text_area("Comment", height=80, key=f"new_rev_{global_idx}")
-                        
+                       
                         col_save, col_cancel = st.columns(2)
                         with col_save:
                             save_btn = st.form_submit_button("Save Changes", type="primary")
                         with col_cancel:
                             cancel_btn = st.form_submit_button("Cancel")
-                        
+                       
                         if cancel_btn:
                             del st.session_state[f"edit_mode_{global_idx}"]
                             if f"images_to_delete_{global_idx}" in st.session_state:
                                 del st.session_state[f"images_to_delete_{global_idx}"]
                             st.rerun()
-                        
+                       
                         if save_btn:
                             if not all([new_name.strip(), new_address.strip()]):
                                 st.error("Name and address required")
@@ -292,8 +305,8 @@ if action == "View All Places":
                                 st.warning("Name already exists!")
                             else:
                                 current_images = r.get("images", []).copy()
-                                
-                                # Handle image deletions (from checkboxes)
+                               
+                                # Handle image deletions
                                 delete_key = f"images_to_delete_{global_idx}"
                                 if delete_key in st.session_state and st.session_state[delete_key]:
                                     for img_idx in sorted(st.session_state[delete_key], reverse=True):
@@ -308,12 +321,12 @@ if action == "View All Places":
                                         except Exception as e:
                                             st.warning(f"Could not delete image from storage: {str(e)}")
                                     del st.session_state[delete_key]
-                                
+                               
                                 # Add new uploaded images
                                 if new_uploaded:
                                     new_urls = upload_images_to_supabase(new_uploaded, new_name)
                                     current_images.extend(new_urls)
-                                
+                               
                                 # Handle review deletions and add new review
                                 for i in sorted(reviews_to_delete, reverse=True):
                                     del r["reviews"][i]
@@ -323,7 +336,7 @@ if action == "View All Places":
                                         "reviewer": "You",
                                         "date": datetime.now().strftime("%B %d, %Y")
                                     })
-                                
+                               
                                 # Update restaurant fields
                                 r.update({
                                     "name": new_name.strip(),
@@ -332,10 +345,10 @@ if action == "View All Places":
                                     "location": new_location,
                                     "address": new_address.strip(),
                                     "type": new_type,
-                                    "visited": new_visited,
+                                    "visited": r.get("visited", False),  # Use the live value (toggled via button)
                                     "images": current_images
                                 })
-                                
+                               
                                 save_data(restaurants)
                                 st.session_state.restaurants = load_data()
                                 st.success(f"{new_name} saved!")
@@ -433,7 +446,7 @@ else:
                     fav = " ❤️" if c.get("favorite") else ""
                     vis = " ✅ Visited" if c.get("visited") else ""
                     st.markdown(f"# {c['name']}{tag}{fav}{vis}")
-                    
+                   
                     # DISPLAY ALL IMAGES IN ROWS OF 3
                     if c.get("images"):
                         for i in range(0, len(c["images"]), 3):
@@ -444,7 +457,7 @@ else:
                                         st.image(c["images"][i + j], use_column_width=True)
                     else:
                         st.caption("No photos yet 📸")
-                    
+                   
                     st.write(f"{c['cuisine']} • {c['price']} • {c['location']}")
                     st.write(f"**Address:** {c.get('address','')}")
                     st.markdown(f"[📍 Google Maps]({google_maps_link(c.get('address',''), c['name'])})")
