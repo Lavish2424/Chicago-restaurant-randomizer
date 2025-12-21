@@ -1,27 +1,9 @@
 import streamlit as st
 import random
 import urllib.parse
-from datetime import datetime, timedelta
+from datetime import datetime
 from supabase import create_client, Client
 import os
-
-# ==================== CUSTOM CSS FOR GREEN BANNER ====================
-st.markdown("""
-    <style>
-    .success-banner {
-        padding: 1.5rem;
-        border-radius: 0.8rem;
-        background-color: #d4edda;
-        border: 2px solid #c3e6cb;
-        color: #155724;
-        text-align: center;
-        font-size: 1.8rem;
-        font-weight: bold;
-        margin: 1rem 0;
-        box-shadow: 0 6px 12px rgba(0,0,0,0.15);
-    }
-    </style>
-    """, unsafe_allow_html=True)
 
 # ==================== SUPABASE SETUP ====================
 supabase_url = st.secrets["SUPABASE_URL"]
@@ -75,19 +57,6 @@ if "restaurants" not in st.session_state:
 
 restaurants = st.session_state.restaurants
 
-# ==================== GREEN CONFIRMATION BANNER DISPLAY ====================
-# Show banner for 5 seconds after successful add
-if "add_success_time" in st.session_state:
-    if datetime.now() - st.session_state.add_success_time < timedelta(seconds=5):
-        success_msg = st.session_state.get("add_success_message", "Place added successfully!")
-        st.markdown(f'<div class="success-banner">✅ {success_msg}</div>', unsafe_allow_html=True)
-    else:
-        # Auto-clear after 5 seconds
-        if "add_success_time" in st.session_state:
-            del st.session_state.add_success_time
-        if "add_success_message" in st.session_state:
-            del st.session_state.add_success_message
-
 st.markdown("<h1 style='text-align: center;'>🍽️ Chicago Restaurant/Bar Randomizer</h1>", unsafe_allow_html=True)
 st.markdown("<p style='text-align: center;'>Add, favorite, and randomly pick Chicago eats & drinks! 🍸</p>", unsafe_allow_html=True)
 
@@ -111,12 +80,13 @@ VISITED_OPTIONS = ["All", "Visited Only", "Not Visited Yet"]
 
 def delete_restaurant(index):
     r = restaurants[index]
-   
+    
     # Delete associated images from Supabase Storage if any
     if r.get("images"):
         paths_to_delete = []
         for url in r["images"]:
             try:
+                # Extract the file path from the public URL
                 parsed = urllib.parse.urlparse(url)
                 path = parsed.path
                 prefix = f"/storage/v1/object/public/{BUCKET_NAME}/"
@@ -125,17 +95,17 @@ def delete_restaurant(index):
                     paths_to_delete.append(file_path)
             except Exception as e:
                 st.error(f"Error parsing image URL {url}: {str(e)}")
-       
+        
         if paths_to_delete:
             try:
                 supabase.storage.from_(BUCKET_NAME).remove(paths_to_delete)
             except Exception as e:
                 st.error(f"Failed to delete some images from storage: {str(e)}")
-   
+    
     # Delete the row from the database
     if "id" in r:
         supabase.table("restaurants").delete().eq("id", r["id"]).execute()
-   
+    
     del restaurants[index]
     st.session_state.restaurants = load_data()
     img_count = len(r.get("images", []))
@@ -176,7 +146,7 @@ def upload_images_to_supabase(uploaded_files, restaurant_name):
                     "upsert": "true"
                 }
             )
-            public_url = supabase.storage.from_(BUCKET_NAME).get_public_url(file_path).public_url
+            public_url = supabase.storage.from_(BUCKET_NAME).get_public_url(file_path)
             urls.append(public_url)
         except Exception as e:
             st.error(f"Failed to upload {file.name}: {str(e)}")
@@ -216,7 +186,7 @@ if action == "View All Places":
             notes_count = f" • {len(r['reviews'])} note{'s' if len(r['reviews']) != 1 else ''}" if r["reviews"] else ""
             with st.expander(f"{r['name']}{icon}{fav}{visited} • {r['cuisine']} • {r['price']} • {r['location']}{img_count}{notes_count}",
                              expanded=(f"edit_mode_{global_idx}" in st.session_state)):
-              
+               
                 if r.get("images"):
                     cols = st.columns(min(3, len(r["images"])))
                     for img_url, col in zip(r["images"], cols):
@@ -374,12 +344,7 @@ elif action == "Add a Place":
                 try:
                     supabase.table("restaurants").insert(new).execute()
                     st.session_state.restaurants = load_data()
-
-                    # === SET SUCCESS BANNER ===
-                    photo_text = f"with {len(image_urls)} photo{'s' if len(image_urls) > 1 else ''}" if image_urls else "with no photos"
-                    st.session_state.add_success_time = datetime.now()
-                    st.session_state.add_success_message = f"{name} added successfully {photo_text}!"
-
+                    st.success(f"{name} added with {len(image_urls)} photo{'s' if len(image_urls)>1 else ''}!")
                     st.rerun()
                 except Exception as e:
                     st.error(f"Failed to add place: {str(e)}")
