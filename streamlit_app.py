@@ -154,7 +154,7 @@ def upload_images_to_supabase(uploaded_files, restaurant_name):
 
 # ────────────────────────────── View All Places ──────────────────────────────
 if action == "View All Places":
-    st.header("All Places")
+    st.header("All Places 👀")
     st.caption(f"{len(restaurants)} place(s)")
     if not restaurants:
         st.info("No places added yet.")
@@ -300,7 +300,7 @@ if action == "View All Places":
 
 # ────────────────────────────── Add a Place ──────────────────────────────
 elif action == "Add a Place":
-    st.header("Add a New Place")
+    st.header("Add a New Place 📍")
     with st.form("add_place_form"):
         name = st.text_input("Name*")
         cuisine = st.selectbox("Cuisine/Style*", CUISINES)
@@ -351,7 +351,7 @@ elif action == "Add a Place":
 
 # ────────────────────────────── Random Pick ──────────────────────────────
 else:
-    st.header("🎲 Random Place Picker")
+    st.header("Random Place Picker 🎲")
     if not restaurants:
         st.info("Add places first!")
     else:
