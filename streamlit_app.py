@@ -5,90 +5,14 @@ from datetime import datetime
 from supabase import create_client, Client
 import os
 
-# ==================== SUPABASE CLIENT ====================
-def get_supabase_client() -> Client:
-    client = create_client(st.secrets["SUPABASE_URL"], st.secrets["SUPABASE_ANON_KEY"])
-    # Only set session if we have a valid access token
-    if "access_token" in st.session_state and st.session_state.access_token:
-        try:
-            client.auth.set_session(st.session_state.access_token)
-            # Bonus: Refresh session if possible to keep user logged in longer
-            if "refresh_token" in st.session_state and st.session_state.refresh_token:
-                client.auth.refresh_session(st.session_state.refresh_token)
-        except Exception as e:
-            st.error(f"Session error: {e}")
-            # On error, clear bad session
-            st.session_state.pop("access_token", None)
-            st.session_state.pop("refresh_token", None)
-    return client
+# ==================== SUPABASE SETUP ====================
+supabase_url = st.secrets["SUPABASE_URL"]
+supabase_key = st.secrets["SUPABASE_ANON_KEY"]
+supabase: Client = create_client(supabase_url, supabase_key)
 
-BUCKET_NAME = "restaurant-images"  # Public bucket
+BUCKET_NAME = "restaurant-images"  # Make sure this public bucket exists in Supabase
 
-# ==================== AUTHENTICATION ====================
-st.sidebar.header("🔐 User Account")
-
-if "user" not in st.session_state:
-    st.session_state.user = None
-    st.session_state.access_token = None
-    st.session_state.refresh_token = None
-
-if st.session_state.user:
-    st.sidebar.write(f"Logged in as: **{st.session_state.user.email}**")
-    if st.sidebar.button("Logout"):
-        st.session_state.user = None
-        st.session_state.access_token = None
-        st.session_state.refresh_token = None
-        st.success("Logged out successfully!")
-        st.rerun()
-else:
-    st.sidebar.info("Log in to add, edit, delete places, and upload photos.")
-    with st.sidebar.form("login_form"):
-        email = st.text_input("Email")
-        password = st.text_input("Password", type="password")
-        submitted = st.form_submit_button("Login / Sign Up")
-
-        if submitted:
-            if not email or not password:
-                st.error("Please enter a valid email and password.")
-            else:
-                with st.spinner("Processing..."):
-                    supabase = get_supabase_client()
-                    try:
-                        # Try to log in
-                        res = supabase.auth.sign_in_with_password({"email": email, "password": password})
-                    except Exception:
-                        # If login fails, try sign up
-                        try:
-                            res = supabase.auth.sign_up({"email": email, "password": password})
-                            st.success("Account created! Check your email for confirmation (if enabled), then log in.")
-                            st.stop()
-                        except Exception as e:
-                            st.error(f"Sign up failed: {str(e)}")
-                            st.stop()
-
-                    if res.user and res.session:
-                        st.session_state.user = res.user
-                        st.session_state.access_token = res.session.access_token
-                        st.session_state.refresh_token = res.session.refresh_token  # Bonus: persist refresh
-                        st.success("Logged in successfully!")
-                        st.rerun()
-
-# ==================== REQUIRE LOGIN FOR MODIFICATIONS ====================
-st.markdown("<h1 style='text-align: center;'>🍽️ Chicago Restaurant/Bar Randomizer</h1>", unsafe_allow_html=True)
-st.markdown("<p style='text-align: center;'>Add, favorite, and randomly pick Chicago eats & drinks! 🍸</p>", unsafe_allow_html=True)
-
-st.sidebar.header("Actions")
-action = st.sidebar.radio("What do you want to do?", ["View All Places", "Add a Place", "Random Pick (with filters)"])
-st.sidebar.markdown("---")
-st.sidebar.caption("Built by Alan, made for us ❤️")
-
-if action in ["Add a Place", "View All Places"] and not st.session_state.user:
-    st.warning("🔒 Please log in from the sidebar to add, edit, or delete places.")
-    st.stop()
-
-# ==================== DATA FUNCTIONS ====================
 def load_data():
-    supabase = get_supabase_client()
     try:
         response = supabase.table("restaurants").select("*").order("added_date", desc=True).execute()
         data = response.data
@@ -96,7 +20,7 @@ def load_data():
             place.setdefault("favorite", False)
             place.setdefault("visited", False)
             place.setdefault("reviews", [])
-            place.setdefault("images", [])
+            place.setdefault("images", [])  # Ensure images list exists
             if "added_date" not in place:
                 place["added_date"] = datetime.now().isoformat()
         return data
@@ -105,7 +29,6 @@ def load_data():
         return []
 
 def save_data(data):
-    supabase = get_supabase_client()
     try:
         for place in data:
             place_id = place.get("id")
@@ -120,8 +43,7 @@ def save_data(data):
                 "visited": place.get("visited", False),
                 "reviews": place["reviews"],
                 "images": place.get("images", []),
-                "added_date": place.get("added_date"),
-                "user_id": st.session_state.user.id
+                "added_date": place.get("added_date")
             }
             if place_id:
                 supabase.table("restaurants").update(update_data).eq("id", place_id).execute()
@@ -130,8 +52,32 @@ def save_data(data):
     except Exception as e:
         st.error(f"Error saving data: {str(e)}")
 
+# Load data into session state
+if "restaurants" not in st.session_state:
+    st.session_state.restaurants = load_data()
+
+restaurants = st.session_state.restaurants
+
+st.markdown("<h1 style='text-align: center;'>🍽️ Chicago Restaurant/Bar Randomizer</h1>", unsafe_allow_html=True)
+st.markdown("<p style='text-align: center;'>Add, favorite, and randomly pick Chicago eats & drinks! 🍸</p>", unsafe_allow_html=True)
+
+st.sidebar.header("Actions")
+action = st.sidebar.radio("What do you want to do?", ["View All Places", "Add a Place", "Random Pick (with filters)"])
+st.sidebar.markdown("---")
+st.sidebar.caption("Built by Alan, made for us ❤️")
+
+NEIGHBORHOODS = [
+    "Fulton Market", "River North", "Gold Coast", "South Loop",
+    "Chinatown", "Pilsen", "West Town"
+]
+CUISINES = [
+    "Chinese", "Italian", "American", "Mexican", "Japanese", "Indian",
+    "Thai", "French", "Korean", "Pizza", "Burgers", "Seafood",
+    "Steakhouse", "Bar Food", "Cocktails", "Other"
+]
+VISITED_OPTIONS = ["All", "Visited Only", "Not Visited Yet"]
+
 def delete_restaurant(index):
-    supabase = get_supabase_client()
     r = restaurants[index]
     if "id" in r:
         supabase.table("restaurants").delete().eq("id", r["id"]).execute()
@@ -139,15 +85,6 @@ def delete_restaurant(index):
     st.session_state.restaurants = load_data()
     st.success(f"{r['name']} deleted!")
     st.rerun()
-
-if "restaurants" not in st.session_state:
-    st.session_state.restaurants = load_data()
-
-restaurants = st.session_state.restaurants
-
-NEIGHBORHOODS = ["Fulton Market", "River North", "Gold Coast", "South Loop", "Chinatown", "Pilsen", "West Town"]
-CUISINES = ["Chinese", "Italian", "American", "Mexican", "Japanese", "Indian", "Thai", "French", "Korean", "Pizza", "Burgers", "Seafood", "Steakhouse", "Bar Food", "Cocktails", "Other"]
-VISITED_OPTIONS = ["All", "Visited Only", "Not Visited Yet"]
 
 def toggle_favorite(idx):
     restaurants[idx]["favorite"] = not restaurants[idx].get("favorite", False)
@@ -163,10 +100,10 @@ def toggle_visited(idx):
 
 def google_maps_link(address, name=""):
     query = f"{name}, {address}" if name else address
-    return f"https://www/maps.google.com/maps/search/?api=1&query={urllib.parse.quote(query)}"
+    return f"https://www.google.com/maps/search/?api=1&query={urllib.parse.quote(query)}"
 
 def upload_images_to_supabase(uploaded_files, restaurant_name):
-    supabase = get_supabase_client()
+    """Upload images and return list of public URLs"""
     urls = []
     sanitized_name = "".join(c for c in restaurant_name if c.isalnum() or c in " -_").rstrip()
     for i, file in enumerate(uploaded_files):
@@ -179,7 +116,10 @@ def upload_images_to_supabase(uploaded_files, restaurant_name):
             supabase.storage.from_(BUCKET_NAME).upload(
                 path=file_path,
                 file=file.getvalue(),
-                file_options={"content-type": file.type, "upsert": "true"}
+                file_options={
+                    "content-type": file.type,
+                    "upsert": "true"  # Fixed: must be string "true" or "false"
+                }
             )
 
             public_url = supabase.storage.from_(BUCKET_NAME).get_public_url(file_path)
@@ -188,7 +128,7 @@ def upload_images_to_supabase(uploaded_files, restaurant_name):
             st.error(f"Failed to upload {file.name}: {str(e)}")
     return urls
 
-# ==================== VIEW ALL PLACES ====================
+# ────────────────────────────── View All Places ──────────────────────────────
 if action == "View All Places":
     st.header("All Places")
     st.caption(f"{len(restaurants)} place(s)")
@@ -240,13 +180,26 @@ if action == "View All Places":
                         st.write(f"**Address:** {r.get('address', 'Not provided')}")
                         st.markdown(f"[📍 Google Maps]({google_maps_link(r.get('address', ''), r['name'])})")
                     with col2:
-                        if st.button("❤️ Unfavorite" if r.get("favorite") else "❤️ Favorite", key=f"fav_{global_idx}"):
+                        if st.button("❤️ Unfavorite" if r.get("favorite") else "❤️ Favorite",
+                                     key=f"fav_{global_idx}"):
                             toggle_favorite(global_idx)
                         if st.button("Edit ✏️", key=f"edit_{global_idx}"):
                             st.session_state[f"edit_mode_{global_idx}"] = True
                             st.rerun()
-                        if st.button("Delete 🗑️", key=f"del_{global_idx}"):
-                            delete_restaurant(global_idx)
+                        delete_key = f"del_confirm_{global_idx}"
+                        if delete_key in st.session_state:
+                            col_del, col_can = st.columns(2)
+                            with col_del:
+                                if st.button("🗑️ Confirm Delete", type="primary", key=f"conf_{global_idx}"):
+                                    delete_restaurant(global_idx)
+                            with col_can:
+                                if st.button("Cancel", key=f"can_{global_idx}"):
+                                    del st.session_state[delete_key]
+                                    st.rerun()
+                        else:
+                            if st.button("Delete 🗑️", key=f"del_{global_idx}"):
+                                st.session_state[delete_key] = True
+                                st.rerun()
 
                     if r["reviews"]:
                         st.write("**Notes**")
@@ -288,7 +241,8 @@ if action == "View All Places":
                                     reviews_to_delete.append(i)
                             rev["comment"] = new_comment
 
-                        new_rev_comment = st.text_area("Add new note (optional)", height=80, key=f"new_rev_{global_idx}")
+                        st.write("Add new note (optional)")
+                        new_rev_comment = st.text_area("Comment", height=80, key=f"new_rev_{global_idx}")
 
                         col_save, col_cancel = st.columns(2)
                         with col_save:
@@ -301,7 +255,7 @@ if action == "View All Places":
                             st.rerun()
 
                         if save_btn:
-                            if not new_name.strip() or not new_address.strip():
+                            if not all([new_name.strip(), new_address.strip()]):
                                 st.error("Name and address required")
                             elif new_name.lower().strip() != r["name"].lower() and any(e["name"].lower() == new_name.lower().strip() for e in restaurants if e != r):
                                 st.warning("Name already exists!")
@@ -328,8 +282,7 @@ if action == "View All Places":
                                     "address": new_address.strip(),
                                     "type": new_type,
                                     "visited": new_visited,
-                                    "images": current_images,
-                                    "user_id": st.session_state.user.id
+                                    "images": current_images
                                 })
                                 save_data(restaurants)
                                 st.session_state.restaurants = load_data()
@@ -337,7 +290,7 @@ if action == "View All Places":
                                 del st.session_state[f"edit_mode_{global_idx}"]
                                 st.rerun()
 
-# ==================== ADD A PLACE ====================
+# ────────────────────────────── Add a Place ──────────────────────────────
 elif action == "Add a Place":
     st.header("Add a New Place")
     with st.form("add_place_form"):
@@ -353,7 +306,7 @@ elif action == "Add a Place":
         quick_notes = st.text_area("Quick notes (optional)", height=100)
 
         if st.form_submit_button("Add Place", type="primary"):
-            if not name.strip() or not address.strip():
+            if not all([name.strip(), address.strip()]):
                 st.error("Name and address required")
             elif any(r["name"].lower() == name.lower().strip() for r in restaurants):
                 st.warning("Already exists!")
@@ -374,8 +327,7 @@ elif action == "Add a Place":
                     "visited": visited,
                     "reviews": [],
                     "images": image_urls,
-                    "added_date": datetime.now().isoformat(),
-                    "user_id": st.session_state.user.id
+                    "added_date": datetime.now().isoformat()
                 }
                 if quick_notes.strip():
                     new["reviews"].append({
@@ -385,7 +337,6 @@ elif action == "Add a Place":
                     })
 
                 try:
-                    supabase = get_supabase_client()
                     supabase.table("restaurants").insert(new).execute()
                     st.session_state.restaurants = load_data()
                     st.success(f"{name} added with {len(image_urls)} photo{'s' if len(image_urls)>1 else ''}!")
@@ -393,7 +344,7 @@ elif action == "Add a Place":
                 except Exception as e:
                     st.error(f"Failed to add place: {str(e)}")
 
-# ==================== RANDOM PICK ====================
+# ────────────────────────────── Random Pick ──────────────────────────────
 else:
     st.header("🎲 Random Place Picker")
     if not restaurants:
