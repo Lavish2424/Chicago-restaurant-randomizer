@@ -61,18 +61,7 @@ st.markdown("<h1 style='text-align: center;'>🍽️ Chicago Restaurant/Bar Rand
 st.markdown("<p style='text-align: center;'>Add, favorite, and randomly pick Chicago eats & drinks! 🍸</p>", unsafe_allow_html=True)
 
 st.sidebar.header("Actions")
-
-# === FIXED SIDEBAR LOGIC ===
-# Check if we need to programmatically switch tabs
-if "force_tab" in st.session_state:
-    action = st.session_state.force_tab
-    # Clean up immediately so sidebar radio renders normally next time
-    del st.session_state.force_tab
-else:
-    action = st.sidebar.radio(
-        "What do you want to do?",
-        ["View All Places", "Add a Place", "Random Pick (with filters)"]
-    )
+action = st.sidebar.radio("What do you want to do?", ["View All Places", "Add a Place", "Random Pick (with filters)"])
 
 st.sidebar.markdown("---")
 st.sidebar.caption("Built by Alan, made for us ❤️")
@@ -98,7 +87,6 @@ def delete_restaurant(index):
         paths_to_delete = []
         for url in r["images"]:
             try:
-                # Extract the file path from the public URL
                 parsed = urllib.parse.urlparse(url)
                 path = parsed.path
                 prefix = f"/storage/v1/object/public/{BUCKET_NAME}/"
@@ -313,29 +301,6 @@ if action == "View All Places":
 # ────────────────────────────── Add a Place ──────────────────────────────
 elif action == "Add a Place":
     st.header("Add a New Place")
-    
-    # Show success message if we just added a place
-    if "just_added" in st.session_state:
-        name = st.session_state.just_added["name"]
-        img_count = st.session_state.just_added["img_count"]
-        photo_text = f"{img_count} photo{'s' if img_count != 1 else ''}" if img_count > 0 else "no photos"
-        st.success(f"🎉 **{name}** added successfully with {photo_text}!")
-
-        if st.button("👀 View All Places →", type="primary", use_container_width=True):
-            # Programmatically switch to View All Places
-            st.session_state.force_tab = "View All Places"
-            # Clean up success message state
-            del st.session_state.just_added
-            st.rerun()
-
-        # Optional: add a secondary button to add another place
-        if st.button("➕ Add Another Place"):
-            del st.session_state.just_added
-            st.rerun()
-
-        st.stop()  # Don't show the form below the success message
-
-    # Normal add form
     with st.form("add_place_form"):
         name = st.text_input("Name*")
         cuisine = st.selectbox("Cuisine/Style*", CUISINES)
@@ -347,10 +312,7 @@ elif action == "Add a Place":
         visited = st.checkbox("✅ I've already visited")
         uploaded_images = st.file_uploader("Upload photos", type=["png", "jpg", "jpeg", "webp"], accept_multiple_files=True)
         quick_notes = st.text_area("Quick notes (optional)", height=100)
-
-        submitted = st.form_submit_button("Add Place", type="primary")
-
-        if submitted:
+        if st.form_submit_button("Add Place", type="primary"):
             if not all([name.strip(), address.strip()]):
                 st.error("Name and address required")
             elif any(r["name"].lower() == name.lower().strip() for r in restaurants):
@@ -360,7 +322,6 @@ elif action == "Add a Place":
                 if uploaded_images:
                     with st.spinner("Uploading images..."):
                         image_urls = upload_images_to_supabase(uploaded_images, name)
-
                 new = {
                     "name": name.strip(),
                     "cuisine": cuisine,
@@ -380,18 +341,11 @@ elif action == "Add a Place":
                         "reviewer": "You",
                         "date": datetime.now().strftime("%B %d, %Y")
                     })
-
                 try:
                     supabase.table("restaurants").insert(new).execute()
                     st.session_state.restaurants = load_data()
-
-                    # Store success info
-                    st.session_state.just_added = {
-                        "name": name.strip(),
-                        "img_count": len(image_urls)
-                    }
-                    st.rerun()
-
+                    st.success(f"{name} added with {len(image_urls)} photo{'s' if len(image_urls)>1 else ''}!")
+                    st.rerun()  # Simple refresh — clears form and shows success briefly
                 except Exception as e:
                     st.error(f"Failed to add place: {str(e)}")
 
