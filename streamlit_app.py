@@ -201,9 +201,16 @@ if action == "View All Places":
                         st.write(f"**Address:** {r.get('address', 'Not provided')}")
                         st.markdown(f"[📍 Google Maps]({google_maps_link(r.get('address', ''), r['name'])})")
                     with col2:
+                        # Favorite button
                         if st.button("❤️ Unfavorite" if r.get("favorite") else "❤️ Favorite",
                                      key=f"fav_{global_idx}"):
                             toggle_favorite(global_idx)
+                        # Visited toggle button - now in the main view, just like favorite
+                        if st.button("✅ Mark as Unvisited" if r.get("visited") else "✅ Mark as Visited",
+                                     key=f"vis_{global_idx}",
+                                     type="secondary" if not r.get("visited") else "primary"):
+                            toggle_visited(global_idx)
+                        # Edit and Delete
                         if st.button("Edit ✏️", key=f"edit_{global_idx}"):
                             st.session_state[f"edit_mode_{global_idx}"] = True
                             st.rerun()
@@ -231,22 +238,6 @@ if action == "View All Places":
                         st.write("_No notes yet — be the first!_")
                 else:
                     st.subheader(f"Editing: {r['name']}")
-
-                    # Visited toggle button OUTSIDE the form (instant update)
-                    col_vis_btn, col_vis_info = st.columns([2, 5])
-                    with col_vis_btn:
-                        if st.button(
-                            "✅ Mark as Unvisited" if r.get("visited", False) else "✅ Mark as Visited",
-                            key=f"toggle_visited_out_{global_idx}",
-                            use_container_width=True,
-                            type="primary" if r.get("visited", False) else "secondary"
-                        ):
-                            toggle_visited(global_idx)
-
-                    with col_vis_info:
-                        st.caption("Status: " + ("I've already visited this place" if r.get("visited", False) else "Not visited yet"))
-
-                    # The actual edit form (no visited control inside)
                     with st.form(key=f"edit_form_{global_idx}"):
                         new_name = st.text_input("Name*", value=r["name"])
                         new_cuisine = st.selectbox("Cuisine/Style*", CUISINES, index=CUISINES.index(r["cuisine"]))
@@ -338,7 +329,7 @@ if action == "View All Places":
                                         "date": datetime.now().strftime("%B %d, %Y")
                                     })
                                
-                                # Update restaurant fields (visited is already current from toggle button)
+                                # Update restaurant fields
                                 r.update({
                                     "name": new_name.strip(),
                                     "cuisine": new_cuisine,
