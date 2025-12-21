@@ -61,9 +61,9 @@ st.markdown("<h1 style='text-align: center;'>🍽️ Chicago Restaurant/Bar Rand
 st.markdown("<p style='text-align: center;'>Add, favorite, and randomly pick Chicago eats & drinks! 🍸</p>", unsafe_allow_html=True)
 
 st.sidebar.header("Actions")
-action = st.sidebar.radio("What do you want to do? 👀", ["View All Places", "Add a Place", "Random Pick (with filters)"])
+action = st.sidebar.radio("What do you want to do? 👀", ["View All Places", "Add a Place 📍", "Random Pick 🎲"])
 st.sidebar.markdown("---")
-st.sidebar.caption("Built by Alan, made for us ❤️")
+st.sidebar.caption("Built by Alan, made for us ❤️💑🏻")
 
 NEIGHBORHOODS = [
     "Fulton Market", "River North", "Gold Coast", "South Loop",
@@ -72,8 +72,8 @@ NEIGHBORHOODS = [
 
 CUISINES = [
     "Chinese", "Italian", "American", "Mexican", "Japanese", "Indian",
-    "Thai", "French", "Korean", "Pizza", "Burgers", "Seafood",
-    "Steakhouse", "Bar Food", "Cocktails", "Other"
+    "Thai", "French", "Korean", "Seafood",
+    "Steakhouse", "Drinks", "Other"
 ]
 
 VISITED_OPTIONS = ["All", "Visited Only", "Not Visited Yet"]
