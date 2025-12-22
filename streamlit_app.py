@@ -184,12 +184,7 @@ if action == "View All Places":
                              expanded=(f"edit_mode_{global_idx}" in st.session_state)):
               
                 if f"edit_mode_{global_idx}" not in st.session_state:
-                    # New horizontal layout: address + maps on one line
-                    st.write(f"**Address:** {r.get('address', 'Not provided')}  •  [📍 Open in Google Maps]({google_maps_link(r.get('address', ''), r['name'])})")
-
-                    st.markdown("---")
-
-                    # Four compact action buttons in a row
+                    # Four action buttons in a row (now at the top)
                     btn1, btn2, btn3, btn4 = st.columns(4)
 
                     with btn1:
@@ -224,11 +219,19 @@ if action == "View All Places":
                                 st.session_state[delete_key] = True
                                 st.rerun()
 
-                    # Cancel button if confirmation is active (shown below the row)
+                    # Cancel button if confirmation is active
                     if delete_key in st.session_state:
                         if st.button("Cancel Delete", key=f"can_{global_idx}", use_container_width=True):
                             del st.session_state[delete_key]
                             st.rerun()
+
+                    st.markdown("---")
+
+                    # Address + Google Maps link now UNDER the buttons
+                    st.write(f"**Address:** {r.get('address', 'Not provided')}")
+                    st.markdown(f"[📍 Open in Google Maps]({google_maps_link(r.get('address', ''), r['name'])})")
+
+                    st.markdown("---")
 
                     if r["reviews"]:
                         st.markdown("**Notes**")
@@ -251,7 +254,7 @@ if action == "View All Places":
                                         st.image(r["images"][i + j], use_column_width=True)
 
                 else:
-                    # Edit mode remains unchanged
+                    # Edit mode (unchanged)
                     st.subheader(f"Editing: {r['name']}")
                     with st.form(key=f"edit_form_{global_idx}"):
                         new_name = st.text_input("Name*", value=r["name"])
@@ -449,8 +452,8 @@ else:
                     st.markdown(f"# {c['name']}{tag}{fav}{vis}")
                   
                     st.write(f"{c['cuisine']} • {c['price']} • {c['location']}")
-                    st.write(f"**Address:** {c.get('address','')}  •  [📍 Open in Google Maps]({google_maps_link(c.get('address',''), c['name'])})")
                     
+                    # Buttons first in random pick too for consistency
                     idx = restaurants.index(c)
                     col_fav, col_vis = st.columns(2)
                     with col_fav:
@@ -464,6 +467,10 @@ else:
                                      type="secondary",
                                      use_container_width=True):
                             toggle_visited(idx)
+                    
+                    st.markdown("---")
+                    st.write(f"**Address:** {c.get('address','')}")
+                    st.markdown(f"[📍 Open in Google Maps]({google_maps_link(c.get('address',''), c['name'])})")
                     
                     if c["reviews"]:
                         st.markdown("### Notes")
