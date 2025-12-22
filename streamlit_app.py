@@ -184,39 +184,54 @@ if action == "View All Places":
                              expanded=(f"edit_mode_{global_idx}" in st.session_state)):
               
                 if f"edit_mode_{global_idx}" not in st.session_state:
-                    col1, col2 = st.columns([3, 1])
-                    with col1:
-                        st.write(f"**Address:** {r.get('address', 'Not provided')}")
-                        st.markdown(f"[📍 Google Maps]({google_maps_link(r.get('address', ''), r['name'])})")
-                    with col2:
-                        if st.button("❤️ Unfavorite" if r.get("favorite") else "❤️ Favorite",
-                                     key=f"fav_{global_idx}"):
+                    # New horizontal layout: address + maps on one line
+                    st.write(f"**Address:** {r.get('address', 'Not provided')}  •  [📍 Open in Google Maps]({google_maps_link(r.get('address', ''), r['name'])})")
+
+                    st.markdown("---")
+
+                    # Four compact action buttons in a row
+                    btn1, btn2, btn3, btn4 = st.columns(4)
+
+                    with btn1:
+                        if st.button(
+                            "❤️ Favorite" if not r.get("favorite") else "💔 Unfavorite",
+                            key=f"fav_{global_idx}",
+                            use_container_width=True
+                        ):
                             toggle_favorite(global_idx)
-                       
-                        if st.button("✅ Mark as Unvisited" if r.get("visited") else "✅ Mark as Visited",
-                                     key=f"vis_{global_idx}",
-                                     type="secondary"):
+
+                    with btn2:
+                        if st.button(
+                            "✅ Mark Visited" if not r.get("visited") else "❌ Mark Unvisited",
+                            key=f"vis_{global_idx}",
+                            type="secondary",
+                            use_container_width=True
+                        ):
                             toggle_visited(global_idx)
-                       
-                        if st.button("Edit ✏️", key=f"edit_{global_idx}"):
+
+                    with btn3:
+                        if st.button("Edit ✏️", key=f"edit_{global_idx}", use_container_width=True):
                             st.session_state[f"edit_mode_{global_idx}"] = True
                             st.rerun()
+
+                    with btn4:
                         delete_key = f"del_confirm_{global_idx}"
                         if delete_key in st.session_state:
-                            col_del, col_can = st.columns(2)
-                            with col_del:
-                                if st.button("🗑️ Confirm Delete", type="primary", key=f"conf_{global_idx}"):
-                                    delete_restaurant(global_idx)
-                            with col_can:
-                                if st.button("Cancel", key=f"can_{global_idx}"):
-                                    del st.session_state[delete_key]
-                                    st.rerun()
+                            if st.button("🗑️ Confirm Delete", type="primary", key=f"conf_{global_idx}", use_container_width=True):
+                                delete_restaurant(global_idx)
                         else:
-                            if st.button("Delete 🗑️", key=f"del_{global_idx}"):
+                            if st.button("Delete 🗑️", key=f"del_{global_idx}", use_container_width=True):
                                 st.session_state[delete_key] = True
                                 st.rerun()
+
+                    # Cancel button if confirmation is active (shown below the row)
+                    if delete_key in st.session_state:
+                        if st.button("Cancel Delete", key=f"can_{global_idx}", use_container_width=True):
+                            del st.session_state[delete_key]
+                            st.rerun()
+
                     if r["reviews"]:
-                        st.write("**Notes**")
+                        st.markdown("**Notes**")
                         for rev in reversed(r["reviews"]):
                             st.write(f"**{rev['reviewer']} ({rev['date']})**")
                             st.write(rev['comment'])
@@ -224,7 +239,7 @@ if action == "View All Places":
                     else:
                         st.write("_No notes yet — be the first!_")
 
-                    # Images moved to the bottom
+                    # Images at the bottom
                     if r.get("images"):
                         st.markdown("---")
                         st.write("**Photos**")
@@ -234,9 +249,9 @@ if action == "View All Places":
                                 if i + j < len(r["images"]):
                                     with col:
                                         st.image(r["images"][i + j], use_column_width=True)
-              
+
                 else:
-                    # Edit mode (unchanged - images already handled separately in form)
+                    # Edit mode remains unchanged
                     st.subheader(f"Editing: {r['name']}")
                     with st.form(key=f"edit_form_{global_idx}"):
                         new_name = st.text_input("Name*", value=r["name"])
@@ -434,19 +449,20 @@ else:
                     st.markdown(f"# {c['name']}{tag}{fav}{vis}")
                   
                     st.write(f"{c['cuisine']} • {c['price']} • {c['location']}")
-                    st.write(f"**Address:** {c.get('address','')}")
-                    st.markdown(f"[📍 Google Maps]({google_maps_link(c.get('address',''), c['name'])})")
+                    st.write(f"**Address:** {c.get('address','')}  •  [📍 Open in Google Maps]({google_maps_link(c.get('address',''), c['name'])})")
                     
                     idx = restaurants.index(c)
                     col_fav, col_vis = st.columns(2)
                     with col_fav:
                         if st.button("❤️ Unfavorite" if c.get("favorite") else "❤️ Favorite",
-                                     key=f"rand_fav_{idx}"):
+                                     key=f"rand_fav_{idx}",
+                                     use_container_width=True):
                             toggle_favorite(idx)
                     with col_vis:
                         if st.button("✅ Mark as Unvisited" if c.get("visited") else "✅ Mark as Visited",
                                      key=f"rand_vis_{idx}",
-                                     type="secondary"):
+                                     type="secondary",
+                                     use_container_width=True):
                             toggle_visited(idx)
                     
                     if c["reviews"]:
@@ -457,7 +473,7 @@ else:
                     else:
                         st.info("No notes yet!")
                     
-                    # Images moved to the very bottom in random pick too
+                    # Images at the bottom
                     if c.get("images"):
                         st.markdown("---")
                         st.subheader("Photos")
