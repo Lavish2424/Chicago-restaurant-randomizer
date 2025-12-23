@@ -4,10 +4,6 @@ import urllib.parse
 from datetime import datetime, date
 from supabase import create_client, Client
 import os
-import json
-import zipfile
-from io import BytesIO
-import requests
 
 # ==================== SUPABASE SETUP ====================
 supabase_url = st.secrets["SUPABASE_URL"]
@@ -22,7 +18,7 @@ def load_data():
         for place in data:
             place.setdefault("favorite", False)
             place.setdefault("visited", False)
-            place.setdefault("visited_date", None)
+            place.setdefault("visited_date", None)  # New field
             place.setdefault("reviews", [])
             place.setdefault("images", [])
         return data
@@ -65,207 +61,7 @@ st.markdown("<p style='text-align: center;'>Add, view, and randomly pick Chicago
 
 st.sidebar.header("Actions")
 action = st.sidebar.radio("What do you want to do?", ["View All Places", "Add a Place", "Random Pick"])
-
 st.sidebar.markdown("---")
-
-# ====================== DATA MANAGEMENT (COLLAPSIBLE) ======================
-with st.sidebar.expander("📁 Data Management", expanded=False):
-    st.write("**Backup or restore your restaurant list**")
-
-    # ----------- DOWNLOAD FULL ZIP BACKUP (JSON + PHOTOS) -----------
-    if st.button("💾 Create & Download Full Backup (ZIP)", type="primary", use_container_width=True):
-        with st.spinner("Preparing your full backup... This may take a moment if you have many photos."):
-            backup_data = {
-                "backup_date": datetime.now().isoformat(),
-                "app_version": "Chicago Restaurant Randomizer",
-                "restaurants": restaurants
-            }
-            json_string = json.dumps(backup_data, indent=2).encode('utf-8')
-
-            zip_buffer = BytesIO()
-            with zipfile.ZipFile(zip_buffer, "w", zipfile.ZIP_DEFLATED) as zip_file:
-                zip_file.writestr("backup.json", json_string)
-
-                total_images = sum(len(r.get("images", [])) for r in restaurants)
-                if total_images > 0:
-                    progress_bar = st.progress(0)
-                    image_count = 0
-                    for r in restaurants:
-                        for img_url in r.get("images", []):
-                            try:
-                                response = requests.get(img_url, timeout=15)
-                                if response.status_code == 200:
-                                    safe_name = "".join(c if c.isalnum() or c in "._-" else "_" for c in r["name"])
-                                    ext = os.path.splitext(img_url)[1] or ".jpg"
-                                    filename = f"photos/{safe_name}_{image_count}{ext}"
-                                    zip_file.writestr(filename, response.content)
-                                image_count += 1
-                                progress_bar.progress(image_count / total_images)
-                            except Exception:
-                                st.warning(f"Could not download an image for {r['name']}")
-                    progress_bar.empty()
-
-            zip_buffer.seek(0)
-            st.success(f"Backup ready! {len(restaurants)} places • {total_images} photos included.")
-
-        st.download_button(
-            label="📥 Download ZIP Backup",
-            data=zip_buffer,
-            file_name=f"chicago_restaurants_full_backup_{date.today().isoformat()}.zip",
-            mime="application/zip",
-            use_container_width=True
-        )
-
-    st.markdown("---")
-
-    # ----------- RESTORE FROM ZIP OR JSON -----------
-    st.write("**Restore from backup**")
-    st.caption("Upload either the full ZIP backup (includes photos) or just the backup.json file")
-
-    uploaded_file = st.file_uploader(
-        "Upload backup file",
-        type=["json", "zip"],
-        key="backup_upload"
-    )
-
-    if uploaded_file:
-        try:
-            # Determine if it's ZIP or JSON
-            is_zip = uploaded_file.name.endswith(".zip") or uploaded_file.type == "application/zip"
-            
-            if is_zip:
-                with zipfile.ZipFile(uploaded_file) as zip_file:
-                    if "backup.json" not in zip_file.namelist():
-                        st.error("ZIP file does not contain 'backup.json'")
-                        st.stop()
-                    
-                    with zip_file.open("backup.json") as json_file:
-                        backup_data = json.load(json_file)
-                    
-                    new_restaurants = backup_data.get("restaurants", [])
-                    
-                    # Extract all photos into memory
-                    photo_files = {}
-                    for file_name in zip_file.namelist():
-                        if file_name.startswith("photos/") and not file_name.endswith("/"):
-                            photo_name = os.path.basename(file_name)
-                            photo_data = zip_file.read(file_name)
-                            photo_files[photo_name] = photo_data
-                    
-                    st.info(f"Found {len(new_restaurants)} places and {len(photo_files)} photos in the ZIP backup.")
-            else:
-                # Pure JSON file
-                backup_data = json.load(uploaded_file)
-                new_restaurants = backup_data.get("restaurants", [])
-                photo_files = {}
-                st.info(f"Found {len(new_restaurants)} places in JSON backup (photos will need to be re-uploaded manually).")
-
-            if not new_restaurants:
-                st.warning("No restaurant data found in the backup.")
-            else:
-                if st.button("⚠️ Replace all current data with this backup", type="primary", use_container_width=True):
-                    confirm = st.checkbox(
-                        "I understand this will **delete all current places and photos** from the database",
-                        value=False
-                    )
-                    if confirm:
-                        with st.spinner("Restoring backup... This may take a while if there are many photos."):
-                            # Step 1: Clean old data (images + records)
-                            try:
-                                current = supabase.table("restaurants").select("id, images").execute().data
-                                image_paths_to_delete = []
-                                for rec in current:
-                                    if rec.get("images"):
-                                        for url in rec["images"]:
-                                            try:
-                                                parsed = urllib.parse.urlparse(url)
-                                                path = parsed.path
-                                                prefix = f"/storage/v1/object/public/{BUCKET_NAME}/"
-                                                if path.startswith(prefix):
-                                                    file_path = path[len(prefix):]
-                                                    image_paths_to_delete.append(file_path)
-                                            except:
-                                                pass
-                                if image_paths_to_delete:
-                                    supabase.storage.from_(BUCKET_NAME).remove(image_paths_to_delete)
-
-                                ids = [rec["id"] for rec in current if rec.get("id")]
-                                if ids:
-                                    supabase.table("restaurants").delete().in_("id", ids).execute()
-                            except Exception as e:
-                                st.error(f"Error cleaning old data: {e}")
-                                st.stop()
-
-                            # Step 2: Insert new places and re-upload photos
-                            try:
-                                progress_bar = st.progress(0)
-                                for idx, place in enumerate(new_restaurants):
-                                    # Insert core data first
-                                    insert_place = {
-                                        "name": place.get("name"),
-                                        "cuisine": place.get("cuisine"),
-                                        "price": place.get("price"),
-                                        "location": place.get("location"),
-                                        "address": place.get("address"),
-                                        "type": place.get("type", "restaurant")
-                                    }
-                                    resp = supabase.table("restaurants").insert(insert_place).execute()
-                                    new_id = resp.data[0]["id"]
-
-                                    # Prepare full data including local fields
-                                    full_place = place.copy()
-                                    full_place["id"] = new_id
-                                    full_place.setdefault("favorite", False)
-                                    full_place.setdefault("visited", False)
-                                    full_place.setdefault("visited_date", None)
-                                    full_place.setdefault("reviews", [])
-                                    full_place["images"] = []
-
-                                    # Re-upload matching photos
-                                    safe_name = "".join(c if c.isalnum() or c in "._-" else "_" for c in place["name"])
-                                    new_image_urls = []
-                                    for photo_name, photo_data in photo_files.items():
-                                        if photo_name.startswith(safe_name + "_"):
-                                            try:
-                                                file_ext = os.path.splitext(photo_name)[1] or ".jpg"
-                                                sanitized_restaurant_name = "".join(c for c in place["name"] if c.isalnum() or c in " -_").rstrip()
-                                                file_path = f"{sanitized_restaurant_name}/{photo_name}"
-                                                
-                                                supabase.storage.from_(BUCKET_NAME).upload(
-                                                    path=file_path,
-                                                    file=photo_data,
-                                                    file_options={
-                                                        "content-type": f"image/{file_ext.lstrip('.')}",
-                                                        "upsert": True
-                                                    }
-                                                )
-                                                public_url = supabase.storage.from_(BUCKET_NAME).get_public_url(file_path)
-                                                new_image_urls.append(public_url)
-                                            except Exception as e:
-                                                st.warning(f"Failed to re-upload {photo_name}: {e}")
-
-                                    full_place["images"] = new_image_urls
-
-                                    # Update record with full data (favorite, visited, reviews, images)
-                                    supabase.table("restaurants").update({
-                                        "favorite": full_place.get("favorite", False),
-                                        "visited": full_place.get("visited", False),
-                                        "visited_date": full_place.get("visited_date"),
-                                        "reviews": full_place.get("reviews", []),
-                                        "images": full_place["images"]
-                                    }).eq("id", new_id).execute()
-
-                                    progress_bar.progress((idx + 1) / len(new_restaurants))
-
-                                progress_bar.empty()
-                                st.success("✅ Full backup restored successfully — including all photos!")
-                                st.session_state.restaurants = load_data()
-                                st.rerun()
-                            except Exception as e:
-                                st.error(f"Failed to restore data: {str(e)}")
-        except Exception as e:
-            st.error(f"Invalid or corrupted backup file: {str(e)}")
-
 st.sidebar.caption("Built by Alan, made for us ❤️")
 
 NEIGHBORHOODS = ["Fulton Market", "River North", "Gold Coast", "South Loop", "Chinatown", "Pilsen", "West Town", "West Loop"]
@@ -306,6 +102,7 @@ def toggle_favorite(idx):
 
 def toggle_visited(idx):
     restaurants[idx]["visited"] = not restaurants[idx].get("visited", False)
+    # If unvisiting, optionally clear the date – here we keep it for history
     save_data(restaurants)
     st.session_state.restaurants = load_data()
     st.rerun()
@@ -419,6 +216,7 @@ if action == "View All Places":
                                 if i + j < len(r["images"]):
                                     with col:
                                         st.image(r["images"][i + j], use_column_width=True)
+
                 else:
                     st.subheader(f"Editing: {r['name']}")
                     with st.form(key=f"edit_form_{global_idx}"):
@@ -430,7 +228,11 @@ if action == "View All Places":
                         new_type = st.selectbox("Type*", ["restaurant", "cocktail_bar"],
                                                 format_func=lambda x: "Restaurant 🍽️" if x=="restaurant" else "Cocktail Bar 🍸",
                                                 index=0 if r.get("type")=="restaurant" else 1)
+
+                        # Visited checkbox
                         new_visited = st.checkbox("✅ I've visited this place", value=r.get("visited", False))
+
+                        # Date visited – only shown if visited
                         new_visited_date = None
                         if new_visited:
                             current_visited_date = None
@@ -511,6 +313,7 @@ if action == "View All Places":
                                     })
 
                                 visited_date_str = new_visited_date.strftime("%B %d, %Y") if new_visited and new_visited_date else None
+
                                 r.update({
                                     "name": new_name.strip(),
                                     "cuisine": new_cuisine,
@@ -522,6 +325,7 @@ if action == "View All Places":
                                     "visited_date": visited_date_str,
                                     "images": current_images
                                 })
+
                                 save_data(restaurants)
                                 st.session_state.restaurants = load_data()
                                 st.success(f"{new_name} saved!")
@@ -539,10 +343,13 @@ elif action == "Add a Place":
         address = st.text_input("Address*")
         place_type = st.selectbox("Type*", ["restaurant", "cocktail_bar"],
                                   format_func=lambda x: "Restaurant 🍽️" if x=="restaurant" else "Cocktail Bar 🍸")
+
         visited = st.checkbox("✅ I've already visited this place")
+
         visited_date = None
         if visited:
             visited_date = st.date_input("Date Visited", value=date.today())
+
         uploaded_images = st.file_uploader("Upload photos", type=["png", "jpg", "jpeg", "webp"], accept_multiple_files=True)
         quick_notes = st.text_area("Quick notes (optional)", height=100)
 
@@ -556,7 +363,9 @@ elif action == "Add a Place":
                 if uploaded_images:
                     with st.spinner("Uploading images..."):
                         image_urls = upload_images_to_supabase(uploaded_images, name)
+
                 visited_date_str = visited_date.strftime("%B %d, %Y") if visited and visited_date else None
+
                 new = {
                     "name": name.strip(),
                     "cuisine": cuisine,
@@ -600,7 +409,6 @@ else:
             visited_filter = st.selectbox("Visited", VISITED_OPTIONS)
         with col2:
             location_filter = st.multiselect("Neighborhood", sorted({r["location"] for r in restaurants}))
-
         filtered = [r for r in restaurants
                     if (not only_fav or r.get("favorite"))
                     and (type_filter == "all" or r.get("type") == type_filter)
@@ -609,8 +417,7 @@ else:
                     and (not location_filter or r["location"] in location_filter)
                     and (visited_filter == "All" or
                          (visited_filter == "Visited Only" and r.get("visited")) or
-                         (visited_filter == "Not Visited Yet" and not r.get("visited"))) ]
-
+                         (visited_filter == "Not Visited Yet" and not r.get("visited")))]
         st.write(f"**{len(filtered)} places** match")
         if not filtered:
             st.warning("No matches – try broader filters!")
@@ -619,7 +426,6 @@ else:
                 picked = random.choice(filtered)
                 st.session_state.last_pick = picked
                 st.rerun()
-
             if "last_pick" in st.session_state and st.session_state.last_pick in filtered:
                 c = st.session_state.last_pick
                 with st.container(border=True):
@@ -628,7 +434,9 @@ else:
                     vis = " ✅ Visited" if c.get("visited") else ""
                     vis_date = f" ({c.get('visited_date')})" if c.get("visited_date") else ""
                     st.markdown(f"# {c['name']}{tag}{fav}{vis}{vis_date}")
+
                     st.write(f"{c['cuisine']} • {c['price']} • {c['location']}")
+
                     idx = restaurants.index(c)
                     col_fav, col_vis = st.columns(2)
                     with col_fav:
