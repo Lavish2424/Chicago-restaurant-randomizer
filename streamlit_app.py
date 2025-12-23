@@ -308,6 +308,7 @@ if action == "View All Places":
                                 st.rerun()
 
 # ────────────────────────────── Add a Place ──────────────────────────────
+# ────────────────────────────── Add a Place ──────────────────────────────
 elif action == "Add a Place":
     st.header("Add a New Place 📍")
     with st.form("add_place_form"):
@@ -319,23 +320,27 @@ elif action == "Add a Place":
         place_type = st.selectbox("Type*", ["restaurant", "cocktail_bar"],
                                   format_func=lambda x: "Restaurant 🍽️" if x=="restaurant" else "Cocktail Bar 🍸")
         
-        # ─── FIXED VISITED SECTION ──────────────────────────────────────────────
         visited = st.checkbox("✅ I've already visited this place")
+
+        # THE PERFECT FIX — dynamic key based on checkbox state
+        date_key = "add_visited_date_active" if visited else "add_visited_date_inactive"
         
-        # Always render the date input to maintain consistent widget order
-        # Only show and enable it when the checkbox is checked
-        visited_date = st.date_input(
-            "Date Visited",
-            value=date.today(),
-            key="add_visited_date",  # Unique key to avoid conflicts
-            label_visibility="visible" if visited else "hidden",
-            disabled=not visited
-        )
-        
-        # If not visited, ignore the date value
-        if not visited:
-            visited_date = None
-        # ────────────────────────────────────────────────────────────────────────
+        visited_date = None
+        if visited:
+            visited_date = st.date_input(
+                "Date Visited",
+                value=date.today(),
+                key=date_key  # This changes when checkbox toggles → forces fresh widget
+            )
+        else:
+            # Hidden placeholder with different key so no conflict
+            st.date_input(
+                "Date Visited",
+                value=date.today(),
+                key=date_key,
+                label_visibility="collapsed",
+                disabled=True
+            )
 
         uploaded_images = st.file_uploader("Upload photos", type=["png", "jpg", "jpeg", "webp"], accept_multiple_files=True)
         quick_notes = st.text_area("Quick notes (optional)", height=100)
@@ -350,7 +355,9 @@ elif action == "Add a Place":
                 if uploaded_images:
                     with st.spinner("Uploading images..."):
                         image_urls = upload_images_to_supabase(uploaded_images, name)
-                visited_date_str = visited_date.strftime("%B %d, %Y") if visited and visited_date else None
+                
+                visited_date_str = visited_date.strftime("%B %d, %Y") if visited else None
+                
                 new = {
                     "name": name.strip(),
                     "cuisine": cuisine,
