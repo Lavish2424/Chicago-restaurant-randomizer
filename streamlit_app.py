@@ -333,35 +333,49 @@ if action == "View All Places":
                                 st.rerun()
 
 # ────────────────────────────── Add a Place ──────────────────────────────
-# ────────────────────────────── Add a Place ──────────────────────────────
 elif action == "Add a Place":
     st.header("Add a New Place 📍")
-    with st.form("add_place_form"):
-        name = st.text_input("Name*")
-        cuisine = st.selectbox("Cuisine/Style*", CUISINES)
-        price = st.selectbox("Price*", ["$", "$$", "$$$", "$$$$"])
-        location = st.selectbox("Neighborhood*", NEIGHBORHOODS)
-        address = st.text_input("Address*")
-        place_type = st.selectbox("Type*", ["restaurant", "cocktail_bar"],
-                                  format_func=lambda x: "Restaurant 🍽️" if x=="restaurant" else "Cocktail Bar 🍸")
-        
-        visited = st.checkbox("✅ I've already visited this place")
-        
-        visited_date = None
-        if visited:
-            # Allow user to pick any date, defaulting to today but fully editable
-            visited_date = st.date_input(
-                "Date Visited",
-                value=date.today(),  # defaults to today
-                help="Change this to the actual date you visited (or approximate!)"
-            )
-        else:
-            # Optional: you could allow setting a date even if not marked visited yet,
-            # but probably not needed.
-            pass
 
-        uploaded_images = st.file_uploader("Upload photos", type=["png", "jpg", "jpeg", "webp"], accept_multiple_files=True)
-        quick_notes = st.text_area("Quick notes (optional)", height=100)
+    # Initialize session state keys if not present
+    if "add_visited" not in st.session_state:
+        st.session_state.add_visited = False
+        st.session_state.add_visited_date = date.today()
+
+    with st.form("add_place_form", clear_on_submit=True):
+        name = st.text_input("Name*", key="add_name")
+        cuisine = st.selectbox("Cuisine/Style*", CUISINES, key="add_cuisine")
+        price = st.selectbox("Price*", ["$", "$$", "$$$", "$$$$"], key="add_price")
+        location = st.selectbox("Neighborhood*", NEIGHBORHOODS, key="add_location")
+        address = st.text_input("Address*", key="add_address")
+        place_type = st.selectbox("Type*", ["restaurant", "cocktail_bar"],
+                                  format_func=lambda x: "Restaurant 🍽️" if x=="restaurant" else "Cocktail Bar 🍸",
+                                  key="add_type")
+
+        # Visited checkbox – controlled by session state
+        st.session_state.add_visited = st.checkbox(
+            "✅ I've already visited this place",
+            value=st.session_state.add_visited,
+            key="add_visited_checkbox"
+        )
+
+        # Date input – only shown if visited
+        visited_date = None
+        if st.session_state.add_visited:
+            st.session_state.add_visited_date = st.date_input(
+                "Date Visited",
+                value=st.session_state.add_visited_date,
+                key="add_visited_date_input",
+                help="When did you visit? You can change this to any date."
+            )
+            visited_date = st.session_state.add_visited_date
+
+        uploaded_images = st.file_uploader(
+            "Upload photos",
+            type=["png", "jpg", "jpeg", "webp"],
+            accept_multiple_files=True,
+            key="add_images"
+        )
+        quick_notes = st.text_area("Quick notes (optional)", height=100, key="add_notes")
 
         if st.form_submit_button("Add Place", type="primary"):
             if not all([name.strip(), address.strip()]):
@@ -373,9 +387,9 @@ elif action == "Add a Place":
                 if uploaded_images:
                     with st.spinner("Uploading images..."):
                         image_urls = upload_images_to_supabase(uploaded_images, name)
-                
+
                 visited_date_str = None
-                if visited and visited_date:
+                if st.session_state.add_visited and visited_date:
                     visited_date_str = visited_date.strftime("%B %d, %Y")
 
                 new = {
@@ -386,7 +400,7 @@ elif action == "Add a Place":
                     "address": address.strip(),
                     "type": place_type,
                     "favorite": False,
-                    "visited": visited,
+                    "visited": st.session_state.add_visited,
                     "visited_date": visited_date_str,
                     "reviews": [],
                     "images": image_urls
@@ -397,14 +411,18 @@ elif action == "Add a Place":
                         "reviewer": "You",
                         "date": datetime.now().strftime("%B %d, %Y")
                     })
+
                 try:
                     supabase.table("restaurants").insert(new).execute()
                     st.session_state.restaurants = load_data()
                     st.success(f"{name} added!")
+
+                    # Reset form state after successful add
+                    st.session_state.add_visited = False
+                    st.session_state.add_visited_date = date.today()
                     st.rerun()
                 except Exception as e:
                     st.error(f"Failed to add place: {str(e)}")
-
 # ────────────────────────────── Random Pick ──────────────────────────────
 else:
     st.header("Random Place Picker 🎲")
