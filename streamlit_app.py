@@ -116,7 +116,7 @@ def upload_images_to_supabase(uploaded_files, restaurant_name):
     for i, file in enumerate(uploaded_files):
         try:
             file_ext = os.path.splitext(file.name)[1].lower()
-            filename = f"{sanitized_name}_{int(time.time())}_{i}{file_ext}" # Added timestamp to prevent overwrite issues
+            filename = f"{sanitized_name}_{int(time.time())}_{i}{file_ext}" # Added timestamp to prevent overwrite
             file_path = f"{sanitized_name}/{filename}"
             supabase.storage.from_(BUCKET_NAME).upload(
                 path=file_path,
@@ -304,7 +304,12 @@ if action == "View All Places":
                                 if f"images_to_delete_{global_idx}" in st.session_state:
                                     for img_idx in sorted(st.session_state[f"images_to_delete_{global_idx}"], reverse=True):
                                         deleted_url = current_images.pop(img_idx)
-                                        # Optional: Add logic to remove from bucket if needed
+                                        try:
+                                            # Clean up from storage
+                                            file_path = urllib.parse.urlparse(deleted_url).path[len(f"/storage/v1/object/public/{BUCKET_NAME}/"):]
+                                            supabase.storage.from_(BUCKET_NAME).remove([file_path])
+                                        except:
+                                            pass
                                     del st.session_state[f"images_to_delete_{global_idx}"]
 
                                 if new_uploaded:
@@ -344,7 +349,8 @@ if action == "View All Places":
 elif action == "Add a Place":
     st.header("Add a New Place 📍")
     
-    # We removed st.form so interactions update the UI instantly
+    # We removed st.form here!
+    # This allows interactions (like checking 'visited') to update the UI immediately
     name = st.text_input("Name*")
     cuisine = st.selectbox("Cuisine/Style*", CUISINES)
     price = st.selectbox("Price*", ["$", "$$", "$$$", "$$$$"])
@@ -451,19 +457,23 @@ else:
         if not filtered:
             st.warning("No matches – try broader filters!")
         else:
-            # Action Button with Animation
+            # Action Button with SMOOTH PROGRESS ANIMATION
             if st.button("🎲 Pick Random Place!", type="primary", use_container_width=True):
-                # Animation Start
-                msg_slot = st.empty() 
-                for _ in range(15):
-                    random_temp = random.choice(filtered)
-                    msg_slot.markdown(
-                        f"<h2 style='text-align: center; color: #d3d3d3;'>🎲 {random_temp['name']}...</h2>", 
-                        unsafe_allow_html=True
-                    )
-                    time.sleep(0.1)
-                msg_slot.empty()
-                # Animation End
+                progress_text = "Rolling the dice... 🎲"
+                my_bar = st.progress(0, text=progress_text)
+                
+                # Fill the bar
+                for percent_complete in range(100):
+                    time.sleep(0.01)
+                    if percent_complete == 40:
+                        my_bar.progress(percent_complete + 1, text="Consulting the foodie gods... 🥗")
+                    elif percent_complete == 80:
+                        my_bar.progress(percent_complete + 1, text="Finding the perfect spot... 📍")
+                    else:
+                        my_bar.progress(percent_complete + 1)
+                
+                time.sleep(0.2)
+                my_bar.empty()
 
                 picked = random.choice(filtered)
                 st.session_state.last_pick = picked
