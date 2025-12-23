@@ -311,13 +311,6 @@ if action == "View All Places":
 elif action == "Add a Place":
     st.header("Add a New Place 📍")
     
-    # Checkbox and conditional date input OUTSIDE the form for reliable interaction
-    visited = st.checkbox("✅ I've already visited this place")
-    
-    visited_date = None
-    if visited:
-        visited_date = st.date_input("Date Visited", value=date.today())
-    
     with st.form("add_place_form"):
         name = st.text_input("Name*")
         cuisine = st.selectbox("Cuisine/Style*", CUISINES)
@@ -326,6 +319,13 @@ elif action == "Add a Place":
         address = st.text_input("Address*")
         place_type = st.selectbox("Type*", ["restaurant", "cocktail_bar"],
                                   format_func=lambda x: "Restaurant 🍽️" if x=="restaurant" else "Cocktail Bar 🍸")
+        
+        # Moved here — right after Type
+        visited = st.checkbox("✅ I've already visited this place")
+        
+        visited_date = None
+        if visited:
+            visited_date = st.date_input("Date Visited", value=date.today())
         
         uploaded_images = st.file_uploader("Upload photos", type=["png", "jpg", "jpeg", "webp"], accept_multiple_files=True)
         quick_notes = st.text_area("Quick notes (optional)", height=100)
