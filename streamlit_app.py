@@ -22,7 +22,7 @@ def load_data():
         for place in data:
             place.setdefault("favorite", False)
             place.setdefault("visited", False)
-            place.setdefault("visited_date", None)  # New field
+            place.setdefault("visited_date", None)
             place.setdefault("reviews", [])
             place.setdefault("images", [])
         return data
@@ -75,7 +75,6 @@ with st.sidebar.expander("📁 Data Management", expanded=False):
     # ----------- DOWNLOAD FULL ZIP BACKUP (JSON + PHOTOS) -----------
     if st.button("💾 Create & Download Full Backup (ZIP)", type="primary", use_container_width=True):
         with st.spinner("Preparing your full backup... This may take a moment if you have many photos."):
-            # Prepare JSON data
             backup_data = {
                 "backup_date": datetime.now().isoformat(),
                 "app_version": "Chicago Restaurant Randomizer",
@@ -83,7 +82,6 @@ with st.sidebar.expander("📁 Data Management", expanded=False):
             }
             json_string = json.dumps(backup_data, indent=2).encode('utf-8')
 
-            # Create in-memory ZIP
             zip_buffer = BytesIO()
             with zipfile.ZipFile(zip_buffer, "w", zipfile.ZIP_DEFLATED) as zip_file:
                 zip_file.writestr("backup.json", json_string)
@@ -98,7 +96,8 @@ with st.sidebar.expander("📁 Data Management", expanded=False):
                                 response = requests.get(img_url, timeout=15)
                                 if response.status_code == 200:
                                     safe_name = "".join(c if c.isalnum() or c in "._-" else "_" for c in r["name"])
-                                    filename = f"photos/{safe_name}_{image_count}{os.path.splitext(img_url)[1]}"
+                                    ext = os.path.splitext(img_url)[1] or ".jpg"
+                                    filename = f"photos/{safe_name}_{image_count}{ext}"
                                     zip_file.writestr(filename, response.content)
                                 image_count += 1
                                 progress_bar.progress(image_count / total_images)
@@ -119,32 +118,60 @@ with st.sidebar.expander("📁 Data Management", expanded=False):
 
     st.markdown("---")
 
-    # ----------- RESTORE FROM JSON BACKUP -----------
-    st.write("**Restore from backup** (JSON only – photos must be re-uploaded manually)")
-    uploaded_backup = st.file_uploader(
-        "Upload a previously saved backup.json file",
-        type=["json"],
+    # ----------- RESTORE FROM ZIP OR JSON -----------
+    st.write("**Restore from backup**")
+    st.caption("Upload either the full ZIP backup (includes photos) or just the backup.json file")
+
+    uploaded_file = st.file_uploader(
+        "Upload backup file",
+        type=["json", "zip"],
         key="backup_upload"
     )
 
-    if uploaded_backup:
+    if uploaded_file:
         try:
-            backup_data = json.load(uploaded_backup)
-            new_restaurants = backup_data.get("restaurants", [])
+            # Determine if it's ZIP or JSON
+            is_zip = uploaded_file.name.endswith(".zip") or uploaded_file.type == "application/zip"
+            
+            if is_zip:
+                with zipfile.ZipFile(uploaded_file) as zip_file:
+                    if "backup.json" not in zip_file.namelist():
+                        st.error("ZIP file does not contain 'backup.json'")
+                        st.stop()
+                    
+                    with zip_file.open("backup.json") as json_file:
+                        backup_data = json.load(json_file)
+                    
+                    new_restaurants = backup_data.get("restaurants", [])
+                    
+                    # Extract all photos into memory
+                    photo_files = {}
+                    for file_name in zip_file.namelist():
+                        if file_name.startswith("photos/") and not file_name.endswith("/"):
+                            photo_name = os.path.basename(file_name)
+                            photo_data = zip_file.read(file_name)
+                            photo_files[photo_name] = photo_data
+                    
+                    st.info(f"Found {len(new_restaurants)} places and {len(photo_files)} photos in the ZIP backup.")
+            else:
+                # Pure JSON file
+                backup_data = json.load(uploaded_file)
+                new_restaurants = backup_data.get("restaurants", [])
+                photo_files = {}
+                st.info(f"Found {len(new_restaurants)} places in JSON backup (photos will need to be re-uploaded manually).")
 
             if not new_restaurants:
-                st.warning("Uploaded file contains no restaurant data.")
+                st.warning("No restaurant data found in the backup.")
             else:
-                st.info(f"Found {len(new_restaurants)} places in the backup.")
                 if st.button("⚠️ Replace all current data with this backup", type="primary", use_container_width=True):
                     confirm = st.checkbox(
                         "I understand this will **delete all current places and photos** from the database",
                         value=False
                     )
                     if confirm:
-                        with st.spinner("Restoring backup..."):
+                        with st.spinner("Restoring backup... This may take a while if there are many photos."):
+                            # Step 1: Clean old data (images + records)
                             try:
-                                # Clean old images & records
                                 current = supabase.table("restaurants").select("id, images").execute().data
                                 image_paths_to_delete = []
                                 for rec in current:
@@ -167,10 +194,13 @@ with st.sidebar.expander("📁 Data Management", expanded=False):
                                     supabase.table("restaurants").delete().in_("id", ids).execute()
                             except Exception as e:
                                 st.error(f"Error cleaning old data: {e}")
+                                st.stop()
 
-                            # Insert new places (core fields only)
+                            # Step 2: Insert new places and re-upload photos
                             try:
-                                for place in new_restaurants:
+                                progress_bar = st.progress(0)
+                                for idx, place in enumerate(new_restaurants):
+                                    # Insert core data first
                                     insert_place = {
                                         "name": place.get("name"),
                                         "cuisine": place.get("cuisine"),
@@ -179,15 +209,62 @@ with st.sidebar.expander("📁 Data Management", expanded=False):
                                         "address": place.get("address"),
                                         "type": place.get("type", "restaurant")
                                     }
-                                    supabase.table("restaurants").insert(insert_place).execute()
+                                    resp = supabase.table("restaurants").insert(insert_place).execute()
+                                    new_id = resp.data[0]["id"]
 
-                                st.success("✅ Backup restored successfully! (Re-upload photos manually if needed)")
+                                    # Prepare full data including local fields
+                                    full_place = place.copy()
+                                    full_place["id"] = new_id
+                                    full_place.setdefault("favorite", False)
+                                    full_place.setdefault("visited", False)
+                                    full_place.setdefault("visited_date", None)
+                                    full_place.setdefault("reviews", [])
+                                    full_place["images"] = []
+
+                                    # Re-upload matching photos
+                                    safe_name = "".join(c if c.isalnum() or c in "._-" else "_" for c in place["name"])
+                                    new_image_urls = []
+                                    for photo_name, photo_data in photo_files.items():
+                                        if photo_name.startswith(safe_name + "_"):
+                                            try:
+                                                file_ext = os.path.splitext(photo_name)[1] or ".jpg"
+                                                sanitized_restaurant_name = "".join(c for c in place["name"] if c.isalnum() or c in " -_").rstrip()
+                                                file_path = f"{sanitized_restaurant_name}/{photo_name}"
+                                                
+                                                supabase.storage.from_(BUCKET_NAME).upload(
+                                                    path=file_path,
+                                                    file=photo_data,
+                                                    file_options={
+                                                        "content-type": f"image/{file_ext.lstrip('.')}",
+                                                        "upsert": True
+                                                    }
+                                                )
+                                                public_url = supabase.storage.from_(BUCKET_NAME).get_public_url(file_path)
+                                                new_image_urls.append(public_url)
+                                            except Exception as e:
+                                                st.warning(f"Failed to re-upload {photo_name}: {e}")
+
+                                    full_place["images"] = new_image_urls
+
+                                    # Update record with full data (favorite, visited, reviews, images)
+                                    supabase.table("restaurants").update({
+                                        "favorite": full_place.get("favorite", False),
+                                        "visited": full_place.get("visited", False),
+                                        "visited_date": full_place.get("visited_date"),
+                                        "reviews": full_place.get("reviews", []),
+                                        "images": full_place["images"]
+                                    }).eq("id", new_id).execute()
+
+                                    progress_bar.progress((idx + 1) / len(new_restaurants))
+
+                                progress_bar.empty()
+                                st.success("✅ Full backup restored successfully — including all photos!")
                                 st.session_state.restaurants = load_data()
                                 st.rerun()
                             except Exception as e:
                                 st.error(f"Failed to restore data: {str(e)}")
         except Exception as e:
-            st.error(f"Invalid backup file: {str(e)}")
+            st.error(f"Invalid or corrupted backup file: {str(e)}")
 
 st.sidebar.caption("Built by Alan, made for us ❤️")
 
@@ -343,7 +420,6 @@ if action == "View All Places":
                                     with col:
                                         st.image(r["images"][i + j], use_column_width=True)
                 else:
-                    # Edit mode form (unchanged from your original code)
                     st.subheader(f"Editing: {r['name']}")
                     with st.form(key=f"edit_form_{global_idx}"):
                         new_name = st.text_input("Name*", value=r["name"])
