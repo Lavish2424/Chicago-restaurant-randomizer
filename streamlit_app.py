@@ -313,10 +313,14 @@ if action == "View All Places":
 elif action == "Add a Place":
     st.header("Add a New Place 📍")
 
-    # Initialize session state for add form
+    # Initialize session state for visited control
     if "add_visited" not in st.session_state:
         st.session_state.add_visited = False
+    if "add_visited_date" not in st.session_state:
         st.session_state.add_visited_date = date.today()
+
+    def toggle_add_visited():
+        st.session_state.add_visited = not st.session_state.add_visited
 
     with st.form("add_place_form", clear_on_submit=True):
         name = st.text_input("Name*", key="add_name")
@@ -328,32 +332,34 @@ elif action == "Add a Place":
                                   format_func=lambda x: "Restaurant 🍽️" if x=="restaurant" else "Cocktail Bar 🍸",
                                   key="add_type")
 
-        # Controlled checkbox and conditional date input
-        st.session_state.add_visited = st.checkbox(
+        # Non-keyed checkbox with on_change callback for instant rerun
+        st.checkbox(
             "✅ I've already visited this place",
             value=st.session_state.add_visited,
-            key="add_visited_checkbox"
+            on_change=toggle_add_visited
         )
 
         visited_date = None
         if st.session_state.add_visited:
-            st.session_state.add_visited_date = st.date_input(
+            visited_date = st.date_input(
                 "Date Visited",
                 value=st.session_state.add_visited_date,
-                key="add_visited_date_input",
-                help="Select the date you visited (or approximate it!)"
+                key="add_visited_date_input",  # Key is safe here since it's conditional
+                help="Select or change the date you visited!"
             )
-            visited_date = st.session_state.add_visited_date
+            # Update session state in case user changes the date
+            st.session_state.add_visited_date = visited_date
 
         uploaded_images = st.file_uploader(
             "Upload photos",
             type=["png", "jpg", "jpeg", "webp"],
             accept_multiple_files=True,
-            key="add_images"
+            key="add_images"  # This key is fine (file_uploader is usually stable)
         )
         quick_notes = st.text_area("Quick notes (optional)", height=100, key="add_notes")
 
-        if st.form_submit_button("Add Place", type="primary"):
+        submitted = st.form_submit_button("Add Place", type="primary")
+        if submitted:
             if not all([name.strip(), address.strip()]):
                 st.error("Name and address required")
             elif any(r["name"].lower() == name.lower().strip() for r in restaurants):
@@ -393,7 +399,7 @@ elif action == "Add a Place":
                     st.session_state.restaurants = load_data()
                     st.success(f"{name} added!")
 
-                    # Reset form after successful submission
+                    # Reset visited state after successful add
                     st.session_state.add_visited = False
                     st.session_state.add_visited_date = date.today()
                     st.rerun()
