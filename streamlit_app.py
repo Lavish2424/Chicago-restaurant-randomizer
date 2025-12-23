@@ -4,7 +4,10 @@ import urllib.parse
 from datetime import datetime, date
 from supabase import create_client, Client
 import os
-import json  # For JSON download
+import io
+import zipfile
+import json
+import requests  # For downloading images during backup
 
 # ==================== SUPABASE SETUP ====================
 supabase_url = st.secrets["SUPABASE_URL"]
@@ -68,23 +71,117 @@ st.sidebar.markdown("---")
 # ==================== DATA MANAGEMENT SECTION ====================
 st.sidebar.subheader("💾 Data Management")
 
-# Only the JSON download button remains
-st.sidebar.markdown("**Local Backup**")
-json_data = json.dumps(restaurants, indent=2, ensure_ascii=False)
-st.sidebar.download_button(
-    label="⬇️ Download Data as JSON",
-    data=json_data.encode('utf-8'),
-    file_name=f"chicago_restaurants_backup_{datetime.now().strftime('%Y%m%d_%H%M')}.json",
-    mime="application/json",
-    use_container_width=True
-)
+# ---- Download ZIP Backup ----
+st.sidebar.markdown("**Local Backup (JSON + Photos)**")
+if st.sidebar.button("📦 Create & Download ZIP Backup", use_container_width=True):
+    with st.spinner("Creating backup... downloading images..."):
+        zip_buffer = io.BytesIO()
+
+        with zipfile.ZipFile(zip_buffer, "w", zipfile.ZIP_DEFLATED) as zip_file:
+            # Add JSON
+            json_str = json.dumps(restaurants, indent=2, ensure_ascii=False)
+            zip_file.writestr("restaurants.json", json_str.encode('utf-8'))
+
+            # Add images
+            for place in restaurants:
+                sanitized_name = "".join(c if c.isalnum() or c in " -_" else "_" for c in place["name"])
+                for idx, img_url in enumerate(place.get("images", [])):
+                    try:
+                        response = requests.get(img_url, timeout=15)
+                        if response.status_code == 200:
+                            # Try to get original extension
+                            ext = os.path.splitext(urllib.parse.urlparse(img_url).path)[1]
+                            if ext.lower() not in [".jpg", ".jpeg", ".png", ".webp", ".gif"]:
+                                ext = ".jpg"
+                            filename = f"{sanitized_name}_{idx}{ext}"
+                            zip_path = f"images/{sanitized_name}/{filename}"
+                            zip_file.writestr(zip_path, response.content)
+                    except Exception as e:
+                        st.warning(f"Could not download image {img_url}: {e}")
+
+        zip_buffer.seek(0)
+        st.session_state.zip_backup = zip_buffer  # Store for download button
+
+if "zip_backup" in st.session_state:
+    st.sidebar.download_button(
+        label="⬇️ Download chicago_restaurants_backup.zip",
+        data=st.session_state.zip_backup,
+        file_name=f"chicago_restaurants_backup_{datetime.now().strftime('%Y%m%d_%H%M')}.zip",
+        mime="application/zip",
+        use_container_width=True
+    )
+    st.sidebar.success("✅ ZIP backup ready!")
+
+# ---- Restore from ZIP ----
+st.sidebar.markdown("**Restore from Backup**")
+uploaded_zip = st.sidebar.file_uploader("Upload a previous ZIP backup", type=["zip"])
+
+if uploaded_zip is not None:
+    if st.sidebar.button("🔄 Restore from Uploaded ZIP", type="primary", use_container_width=True):
+        with st.spinner("Restoring backup... this may take a minute"):
+            try:
+                zip_bytes = io.BytesIO(uploaded_zip.getvalue())
+                with zipfile.ZipFile(zip_bytes, "r") as zip_file:
+                    # Extract JSON
+                    if "restaurants.json" not in zip_file.namelist():
+                        st.error("Invalid backup: missing restaurants.json")
+                    else:
+                        json_str = zip_file.read("restaurants.json").decode('utf-8')
+                        restored_data = json.loads(json_str)
+
+                        # Clear current data first
+                        current_ids = [r.get("id") for r in restaurants if r.get("id")]
+                        if current_ids:
+                            supabase.table("restaurants").delete().in_("id", current_ids).execute()
+                            # Also clear storage (optional: could be more targeted)
+                            # supabase.storage.from_(BUCKET_NAME).remove(...)  # be careful!
+
+                        new_restaurants = []
+                        for place in restored_data:
+                            images = place.get("images", [])
+                            new_image_urls = []
+
+                            # Re-upload images
+                            sanitized_name = "".join(c if c.isalnum() or c in " -_" else "_" for c in place["name"])
+                            for idx, old_url in enumerate(images):
+                                # Find image in ZIP
+                                ext = os.path.splitext(urllib.parse.urlparse(old_url).path)[1] or ".jpg"
+                                filename = f"{sanitized_name}_{idx}{ext}"
+                                zip_path = f"images/{sanitized_name}/{filename}"
+                                if zip_path in zip_file.namelist():
+                                    img_data = zip_file.read(zip_path)
+                                    file_path = f"{sanitized_name}/{filename}"
+                                    supabase.storage.from_(BUCKET_NAME).upload(
+                                        path=file_path,
+                                        file=img_data,
+                                        file_options={"content-type": "image/jpeg", "upsert": True}
+                                    )
+                                    public_url = supabase.storage.from_(BUCKET_NAME).get_public_url(file_path)
+                                    new_image_urls.append(public_url)
+
+                            # Update place with new image URLs
+                            place["images"] = new_image_urls
+                            # Insert into database
+                            response = supabase.table("restaurants").insert(place).execute()
+                            inserted = response.data[0] if response.data else {}
+                            new_restaurants.append(inserted)
+
+                        # Reload session state
+                        st.session_state.restaurants = new_restaurants
+                        st.success("✅ Backup successfully restored!")
+                        st.rerun()
+
+            except Exception as e:
+                st.error(f"Restore failed: {str(e)}")
 
 st.sidebar.markdown("---")
 st.sidebar.caption("Built by Alan, made for us ❤️")
 
-# (The rest of your code continues unchanged below — no modifications needed)
+# ==================== REST OF YOUR APP (unchanged) ====================
 NEIGHBORHOODS = ["Fulton Market", "River North", "Gold Coast", "South Loop", "Chinatown", "Pilsen", "West Town", "West Loop"]
 CUISINES = ["American", "Asian", "Mexican", "Japanese", "Italian", "Indian", "Thai", "French", "Seafood", "Steakhouse", "Cocktails", "Other"]
 VISITED_OPTIONS = ["All", "Visited Only", "Not Visited Yet"]
 
-# ... (all your existing functions and sections: delete_restaurant, toggle_favorite, toggle_visited, upload_images_to_supabase, View All Places, Add a Place, Random Pick, etc.)
+# ... (all your existing functions and sections below remain exactly the same)
+# delete_restaurant, toggle_favorite, toggle_visited, google_maps_link, upload_images_to_supabase,
+# View All Places, Add a Place, Random Pick — no changes needed.
