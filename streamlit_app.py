@@ -308,9 +308,13 @@ if action == "View All Places":
                                 st.rerun()
 
 # ────────────────────────────── Add a Place ──────────────────────────────
-# ────────────────────────────── Add a Place ──────────────────────────────
 elif action == "Add a Place":
     st.header("Add a New Place 📍")
+    
+    # Initialize/reset the visited date in session state for a clean start
+    if "add_form_visited_date" not in st.session_state:
+        st.session_state.add_form_visited_date = date.today()
+    
     with st.form("add_place_form"):
         name = st.text_input("Name*")
         cuisine = st.selectbox("Cuisine/Style*", CUISINES)
@@ -321,31 +325,22 @@ elif action == "Add a Place":
                                   format_func=lambda x: "Restaurant 🍽️" if x=="restaurant" else "Cocktail Bar 🍸")
         
         visited = st.checkbox("✅ I've already visited this place")
-
-        # THE PERFECT FIX — dynamic key based on checkbox state
-        date_key = "add_visited_date_active" if visited else "add_visited_date_inactive"
         
         visited_date = None
         if visited:
             visited_date = st.date_input(
                 "Date Visited",
-                value=date.today(),
-                key=date_key  # This changes when checkbox toggles → forces fresh widget
+                value=st.session_state.add_form_visited_date,
+                key="add_visited_date_input"
             )
-        else:
-            # Hidden placeholder with different key so no conflict
-            st.date_input(
-                "Date Visited",
-                value=date.today(),
-                key=date_key,
-                label_visibility="collapsed",
-                disabled=True
-            )
-
+            # Keep the selected date in session state
+            st.session_state.add_form_visited_date = visited_date
+        
         uploaded_images = st.file_uploader("Upload photos", type=["png", "jpg", "jpeg", "webp"], accept_multiple_files=True)
         quick_notes = st.text_area("Quick notes (optional)", height=100)
         
-        if st.form_submit_button("Add Place", type="primary"):
+        submitted = st.form_submit_button("Add Place", type="primary")
+        if submitted:
             if not all([name.strip(), address.strip()]):
                 st.error("Name and address required")
             elif any(r["name"].lower() == name.lower().strip() for r in restaurants):
@@ -356,7 +351,9 @@ elif action == "Add a Place":
                     with st.spinner("Uploading images..."):
                         image_urls = upload_images_to_supabase(uploaded_images, name)
                 
-                visited_date_str = visited_date.strftime("%B %d, %Y") if visited else None
+                visited_date_str = None
+                if visited and visited_date:
+                    visited_date_str = visited_date.strftime("%B %d, %Y")
                 
                 new = {
                     "name": name.strip(),
@@ -380,6 +377,8 @@ elif action == "Add a Place":
                 try:
                     supabase.table("restaurants").insert(new).execute()
                     st.session_state.restaurants = load_data()
+                    # Reset for next addition
+                    st.session_state.add_form_visited_date = date.today()
                     st.success(f"{name} added!")
                     st.rerun()
                 except Exception as e:
