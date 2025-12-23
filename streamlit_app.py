@@ -73,6 +73,7 @@ NEIGHBORHOODS = ["Fulton Market", "River North", "Gold Coast", "South Loop", "Ch
 CUISINES = ["American", "Asian", "Mexican", "Japanese", "Italian", "Indian", "Thai", "French", "Seafood", "Steakhouse", "Cocktails", "Other"]
 VISITED_OPTIONS = ["All", "Visited Only", "Not Visited Yet"]
 
+# Helper functions remain the same
 def delete_restaurant(index):
     r = restaurants[index]
     if r.get("images"):
@@ -137,46 +138,78 @@ def upload_images_to_supabase(uploaded_files, restaurant_name):
 # ────────────────────────────── Data Management Tab ──────────────────────────────
 if tab == "Data Management":
     st.header("Data Management 📥")
-    st.info("Download your full data for backup or sharing. All photos are fetched from Supabase public URLs.")
+    st.markdown("### Backup your places and photos")
 
-    # Download JSON data
-    if restaurants:
-        data_json = json.dumps(restaurants, indent=2)
-        st.download_button(
-            label="Download Data as JSON",
-            data=data_json,
-            file_name="chicago_restaurants.json",
-            mime="application/json"
-        )
-    else:
-        st.warning("No places added yet – nothing to download.")
+    col1, col2 = st.columns(2)
 
-    # Download all images as ZIP
-    st.subheader("Download All Photos (ZIP)")
-    if any(r.get("images") for r in restaurants):
-        if st.button("Generate & Download ZIP of All Photos"):
-            with st.spinner("Fetching and zipping photos..."):
-                zip_buffer = io.BytesIO()
-                with zipfile.ZipFile(zip_buffer, "w", zipfile.ZIP_DEFLATED) as zip_file:
-                    for r in restaurants:
-                        if r.get("images"):
-                            for img_url in r["images"]:
-                                try:
-                                    response = requests.get(img_url, timeout=10)
-                                    if response.status_code == 200:
-                                        filename = img_url.split("/")[-1]
-                                        zip_file.writestr(f"{r['name']}_{filename}", response.content)
-                                except Exception as e:
-                                    st.warning(f"Failed to fetch {img_url}: {e}")
-                zip_buffer.seek(0)
-                st.download_button(
-                    label="Download Photos ZIP",
-                    data=zip_buffer,
-                    file_name="chicago_restaurants_photos.zip",
-                    mime="application/zip"
-                )
-    else:
-        st.info("No photos uploaded yet.")
+    with col1:
+        st.subheader("📄 Data (JSON)")
+        if restaurants:
+            total_places = len(restaurants)
+            visited_count = sum(1 for r in restaurants if r.get("visited"))
+            photo_count = sum(len(r.get("images", [])) for r in restaurants)
+            st.caption(f"**{total_places}** places • **{visited_count}** visited • **{photo_count}** photos")
+
+            data_json = json.dumps(restaurants, indent=2, ensure_ascii=False)
+            st.download_button(
+                label="Download Full Data (JSON)",
+                data=data_json,
+                file_name=f"chicago_restaurants_backup_{datetime.now().strftime('%Y%m%d')}.json",
+                mime="application/json",
+                use_container_width=True
+            )
+        else:
+            st.info("No places yet — nothing to download.")
+
+    with col2:
+        st.subheader("🖼️ All Photos (ZIP)")
+        total_photos = sum(len(r.get("images", [])) for r in restaurants)
+        if total_photos > 0:
+            st.caption(f"**{total_photos}** photo{'s' if total_photos != 1 else ''} across all places")
+
+            if st.button("Prepare Photos ZIP", use_container_width=True, type="primary"):
+                with st.spinner(f"Downloading and compressing {total_photos} photos..."):
+                    zip_buffer = io.BytesIO()
+                    with zipfile.ZipFile(zip_buffer, "w", zipfile.ZIP_DEFLATED) as zip_file:
+                        downloaded = 0
+                        progress_bar = st.progress(0)
+                        status_text = st.empty()
+
+                        for r in restaurants:
+                            if r.get("images"):
+                                folder_name = "".join(c if c.isalnum() or c in " -_" else "_" for c in r["name"])
+                                for img_url in r["images"]:
+                                    try:
+                                        response = requests.get(img_url, timeout=15)
+                                        if response.status_code == 200:
+                                            filename = img_url.split("/")[-1]
+                                            zip_path = f"{folder_name}/{filename}"
+                                            zip_file.writestr(zip_path, response.content)
+                                            downloaded += 1
+                                            progress_bar.progress(downloaded / total_photos)
+                                            status_text.text(f"Downloaded {downloaded}/{total_photos}: {filename}")
+                                    except Exception as e:
+                                        st.warning(f"Failed to download {img_url.split('/')[-1]}")
+                        progress_bar.empty()
+                        status_text.empty()
+
+                    zip_buffer.seek(0)
+                    st.success(f"✅ All {downloaded} photos ready!")
+                    st.download_button(
+                        label="Download Photos ZIP",
+                        data=zip_buffer,
+                        file_name=f"chicago_restaurants_photos_{datetime.now().strftime('%Y%m%d')}.zip",
+                        mime="application/zip",
+                        use_container_width=True
+                    )
+        else:
+            st.info("No photos uploaded yet.")
+
+    st.markdown("---")
+    st.caption("JSON contains all your places, notes, visited dates, and image URLs. ZIP organizes photos by restaurant name.")
+
+# The rest of the code (View All Places, Add a Place, Random Pick) remains exactly the same as before
+# (omitted here for brevity, but included in full below)
 
 # ────────────────────────────── View All Places ──────────────────────────────
 elif tab == "View All Places":
@@ -266,6 +299,7 @@ elif tab == "View All Places":
                                         st.image(r["images"][i + j], use_column_width=True)
 
                 else:
+                    # Edit form (unchanged from previous version)
                     st.subheader(f"Editing: {r['name']}")
                     with st.form(key=f"edit_form_{global_idx}"):
                         new_name = st.text_input("Name*", value=r["name"])
