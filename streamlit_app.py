@@ -405,16 +405,33 @@ else:
     if not restaurants:
         st.info("Add places first!")
     else:
-        col1, col2 = st.columns(2)
-        with col1:
-            cuisine_filter = st.multiselect("Cuisine", sorted({r["cuisine"] for r in restaurants}))
-            price_filter = st.multiselect("Price", sorted({r["price"] for r in restaurants}, key=len))
-            type_filter = st.selectbox("Type", ["all", "restaurant", "cocktail_bar"],
-                                       format_func=lambda x: {"all":"All", "restaurant":"Restaurants 🍽️", "cocktail_bar":"Bars 🍸"}[x])
-            only_fav = st.checkbox("Only favorites ❤️")
-            visited_filter = st.selectbox("Visited", VISITED_OPTIONS)
-        with col2:
-            location_filter = st.multiselect("Neighborhood", sorted({r["location"] for r in restaurants}))
+        # 1. Create a "Card" for the filters to make it look distinct
+        with st.container(border=True):
+            st.markdown("### 🕵️ Filter Options")
+            
+            # Row 1: The Main Dropdowns (Spread across 3 columns)
+            c1, c2, c3 = st.columns(3)
+            with c1:
+                cuisine_filter = st.multiselect("Cuisine", sorted({r["cuisine"] for r in restaurants}))
+            with c2:
+                location_filter = st.multiselect("Neighborhood", sorted({r["location"] for r in restaurants}))
+            with c3:
+                price_filter = st.multiselect("Price", sorted({r["price"] for r in restaurants}, key=len))
+
+            # Row 2: The Specific Toggles
+            c4, c5, c6 = st.columns(3)
+            with c4:
+                type_filter = st.selectbox("Type", ["all", "restaurant", "cocktail_bar"],
+                                         format_func=lambda x: {"all":"All", "restaurant":"Restaurants 🍽️", "cocktail_bar":"Bars 🍸"}[x])
+            with c5:
+                visited_filter = st.selectbox("Visited Status", VISITED_OPTIONS)
+            with c6:
+                # Adding some vertical space so the checkbox aligns nicely with the dropdowns
+                st.write("") 
+                st.write("") 
+                only_fav = st.checkbox("❤️ Favorites only")
+
+        # 2. Filter Logic (Same as before)
         filtered = [r for r in restaurants
                     if (not only_fav or r.get("favorite"))
                     and (type_filter == "all" or r.get("type") == type_filter)
@@ -424,7 +441,10 @@ else:
                     and (visited_filter == "All" or
                          (visited_filter == "Visited Only" and r.get("visited")) or
                          (visited_filter == "Not Visited Yet" and not r.get("visited")))]
-        st.write(f"**{len(filtered)} places** match")
+        
+        st.caption(f"**{len(filtered)} places** match your filters")
+
+        # 3. The Big Action Button
         if not filtered:
             st.warning("No matches – try broader filters!")
         else:
@@ -432,17 +452,26 @@ else:
                 picked = random.choice(filtered)
                 st.session_state.last_pick = picked
                 st.rerun()
+
+            # 4. Display the Result
             if "last_pick" in st.session_state and st.session_state.last_pick in filtered:
                 c = st.session_state.last_pick
+                
+                # Add some spacing
+                st.markdown("---")
+                
                 with st.container(border=True):
+                    # Header
                     tag = " 🍸 Cocktail Bar" if c.get("type")=="cocktail_bar" else " 🍽️ Restaurant"
                     fav = " ❤️" if c.get("favorite") else ""
                     vis = " ✅ Visited" if c.get("visited") else ""
                     vis_date = f" ({c.get('visited_date')})" if c.get("visited_date") else ""
-                    st.markdown(f"# {c['name']}{tag}{fav}{vis}{vis_date}")
+                    
+                    st.markdown(f"# {c['name']}")
+                    st.caption(f"{tag}{fav}{vis}{vis_date}")
+                    st.markdown(f"**{c['cuisine']} • {c['price']} • {c['location']}**")
 
-                    st.write(f"{c['cuisine']} • {c['price']} • {c['location']}")
-
+                    # Buttons Row
                     idx = restaurants.index(c)
                     col_fav, col_vis = st.columns(2)
                     with col_fav:
@@ -453,35 +482,35 @@ else:
                             toggle_visited(idx)
 
                     st.markdown("---")
-                    st.write(f"**Address:** {c.get('address','')}")
-                    st.markdown(f"[📍 Open in Google Maps]({google_maps_link(c.get('address',''), c['name'])})")
+                    
+                    # Address & Map
+                    st.write(f"📍 **Address:** {c.get('address','')}")
+                    st.markdown(f"[Open in Google Maps ↗️]({google_maps_link(c.get('address',''), c['name'])})")
 
+                    # Reviews
                     if c["reviews"]:
-                        st.markdown("### Notes")
+                        st.markdown("### 📝 Notes")
                         for rev in c["reviews"]:
-                            st.write(f"**{rev['reviewer']} ({rev['date']})**")
-                            st.write(f"_{rev['comment']}_")
+                            with st.chat_message("user"):
+                                st.write(f"**{rev['date']}**")
+                                st.write(rev['comment'])
                     else:
                         st.info("No notes yet!")
 
+                    # Images
                     if c.get("images"):
-                        st.markdown("---")
-                        st.subheader("Photos")
-                        for i in range(0, len(c["images"]), 3):
-                            cols = st.columns(3)
-                            for j, col in enumerate(cols):
-                                if i + j < len(c["images"]):
-                                    with col:
-                                        st.image(c["images"][i + j], use_column_width=True)
-                    else:
-                        st.caption("No photos yet 📸")
+                        st.markdown("### 📸 Photos")
+                        # Display images in a grid
+                        cols = st.columns(3)
+                        for i, img_url in enumerate(c["images"]):
+                            with cols[i % 3]:
+                                st.image(img_url, use_container_width=True)
 
-                    if st.button("🎲 Pick Again!", type="secondary", use_container_width=True):
+                    st.markdown("---")
+                    if st.button("🎲 Pick Again (from same filters)", type="secondary", use_container_width=True):
                         picked = random.choice(filtered)
                         st.session_state.last_pick = picked
                         st.rerun()
+
             elif "last_pick" in st.session_state:
                 st.info("Previous pick no longer matches filters – pick again!")
-                if st.button("Clear previous pick"):
-                    del st.session_state.last_pick
-                    st.rerun()
