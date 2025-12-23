@@ -335,63 +335,69 @@ if action == "View All Places":
 # ────────────────────────────── Add a Place ──────────────────────────────
 elif action == "Add a Place":
     st.header("Add a New Place 📍")
-    with st.form("add_place_form"):
-        name = st.text_input("Name*")
-        cuisine = st.selectbox("Cuisine/Style*", CUISINES)
-        price = st.selectbox("Price*", ["$", "$$", "$$$", "$$$$"])
-        location = st.selectbox("Neighborhood*", NEIGHBORHOODS)
-        address = st.text_input("Address*")
-        place_type = st.selectbox("Type*", ["restaurant", "cocktail_bar"],
-                                  format_func=lambda x: "Restaurant 🍽️" if x=="restaurant" else "Cocktail Bar 🍸")
+    
+    # REMOVED: with st.form("add_place_form"): 
+    # We remove the form so the app updates instantly when you interact with widgets.
 
-        visited = st.checkbox("✅ I've already visited this place")
+    name = st.text_input("Name*")
+    cuisine = st.selectbox("Cuisine/Style*", CUISINES)
+    price = st.selectbox("Price*", ["$", "$$", "$$$", "$$$$"])
+    location = st.selectbox("Neighborhood*", NEIGHBORHOODS)
+    address = st.text_input("Address*")
+    place_type = st.selectbox("Type*", ["restaurant", "cocktail_bar"],
+                              format_func=lambda x: "Restaurant 🍽️" if x=="restaurant" else "Cocktail Bar 🍸")
 
-        visited_date = None
-        if visited:
-            visited_date = st.date_input("Date Visited", value=date.today())
+    # This will now trigger an immediate re-run to show the date picker below
+    visited = st.checkbox("✅ I've already visited this place")
 
-        uploaded_images = st.file_uploader("Upload photos", type=["png", "jpg", "jpeg", "webp"], accept_multiple_files=True)
-        quick_notes = st.text_area("Quick notes (optional)", height=100)
+    visited_date = None
+    if visited:
+        # This now appears immediately!
+        visited_date = st.date_input("Date Visited", value=date.today())
 
-        if st.form_submit_button("Add Place", type="primary"):
-            if not all([name.strip(), address.strip()]):
-                st.error("Name and address required")
-            elif any(r["name"].lower() == name.lower().strip() for r in restaurants):
-                st.warning("Already exists!")
-            else:
-                image_urls = []
-                if uploaded_images:
-                    with st.spinner("Uploading images..."):
-                        image_urls = upload_images_to_supabase(uploaded_images, name)
+    uploaded_images = st.file_uploader("Upload photos", type=["png", "jpg", "jpeg", "webp"], accept_multiple_files=True)
+    quick_notes = st.text_area("Quick notes (optional)", height=100)
 
-                visited_date_str = visited_date.strftime("%B %d, %Y") if visited and visited_date else None
+    # CHANGED: st.form_submit_button -> st.button
+    if st.button("Add Place", type="primary"):
+        if not all([name.strip(), address.strip()]):
+            st.error("Name and address required")
+        elif any(r["name"].lower() == name.lower().strip() for r in restaurants):
+            st.warning("Already exists!")
+        else:
+            image_urls = []
+            if uploaded_images:
+                with st.spinner("Uploading images..."):
+                    image_urls = upload_images_to_supabase(uploaded_images, name)
 
-                new = {
-                    "name": name.strip(),
-                    "cuisine": cuisine,
-                    "price": price,
-                    "location": location,
-                    "address": address.strip(),
-                    "type": place_type,
-                    "favorite": False,
-                    "visited": visited,
-                    "visited_date": visited_date_str,
-                    "reviews": [],
-                    "images": image_urls
-                }
-                if quick_notes.strip():
-                    new["reviews"].append({
-                        "comment": quick_notes.strip(),
-                        "reviewer": "You",
-                        "date": datetime.now().strftime("%B %d, %Y")
-                    })
-                try:
-                    supabase.table("restaurants").insert(new).execute()
-                    st.session_state.restaurants = load_data()
-                    st.success(f"{name} added!")
-                    st.rerun()
-                except Exception as e:
-                    st.error(f"Failed to add place: {str(e)}")
+            visited_date_str = visited_date.strftime("%B %d, %Y") if visited and visited_date else None
+
+            new = {
+                "name": name.strip(),
+                "cuisine": cuisine,
+                "price": price,
+                "location": location,
+                "address": address.strip(),
+                "type": place_type,
+                "favorite": False,
+                "visited": visited,
+                "visited_date": visited_date_str,
+                "reviews": [],
+                "images": image_urls
+            }
+            if quick_notes.strip():
+                new["reviews"].append({
+                    "comment": quick_notes.strip(),
+                    "reviewer": "You",
+                    "date": datetime.now().strftime("%B %d, %Y")
+                })
+            try:
+                supabase.table("restaurants").insert(new).execute()
+                st.session_state.restaurants = load_data()
+                st.success(f"{name} added!")
+                st.rerun()
+            except Exception as e:
+                st.error(f"Failed to add place: {str(e)}")
 
 # ────────────────────────────── Random Pick ──────────────────────────────
 else:
