@@ -4,6 +4,10 @@ import urllib.parse
 from datetime import datetime, date
 from supabase import create_client, Client
 import os
+import json
+import zipfile
+import io
+import requests
 
 # ==================== SUPABASE SETUP ====================
 supabase_url = st.secrets["SUPABASE_URL"]
@@ -18,7 +22,7 @@ def load_data():
         for place in data:
             place.setdefault("favorite", False)
             place.setdefault("visited", False)
-            place.setdefault("visited_date", None)  # New field
+            place.setdefault("visited_date", None)
             place.setdefault("reviews", [])
             place.setdefault("images", [])
         return data
@@ -59,8 +63,9 @@ restaurants = st.session_state.restaurants
 st.markdown("<h1 style='text-align: center;'>🍽️🍸 Chicago Restaurant/Bar Randomizer</h1>", unsafe_allow_html=True)
 st.markdown("<p style='text-align: center;'>Add, view, and randomly pick Chicago eats & drinks!</p>", unsafe_allow_html=True)
 
+# Sidebar with tabs
 st.sidebar.header("Actions")
-action = st.sidebar.radio("What do you want to do?", ["View All Places", "Add a Place", "Random Pick"])
+tab = st.sidebar.radio("Choose a tab:", ["View All Places", "Add a Place", "Random Pick", "Data Management"])
 st.sidebar.markdown("---")
 st.sidebar.caption("Built by Alan, made for us ❤️")
 
@@ -102,7 +107,6 @@ def toggle_favorite(idx):
 
 def toggle_visited(idx):
     restaurants[idx]["visited"] = not restaurants[idx].get("visited", False)
-    # If unvisiting, optionally clear the date – here we keep it for history
     save_data(restaurants)
     st.session_state.restaurants = load_data()
     st.rerun()
@@ -130,8 +134,52 @@ def upload_images_to_supabase(uploaded_files, restaurant_name):
             st.error(f"Failed to upload {file.name}: {str(e)}")
     return urls
 
+# ────────────────────────────── Data Management Tab ──────────────────────────────
+if tab == "Data Management":
+    st.header("Data Management 📥")
+    st.info("Download your full data for backup or sharing. All photos are fetched from Supabase public URLs.")
+
+    # Download JSON data
+    if restaurants:
+        data_json = json.dumps(restaurants, indent=2)
+        st.download_button(
+            label="Download Data as JSON",
+            data=data_json,
+            file_name="chicago_restaurants.json",
+            mime="application/json"
+        )
+    else:
+        st.warning("No places added yet – nothing to download.")
+
+    # Download all images as ZIP
+    st.subheader("Download All Photos (ZIP)")
+    if any(r.get("images") for r in restaurants):
+        if st.button("Generate & Download ZIP of All Photos"):
+            with st.spinner("Fetching and zipping photos..."):
+                zip_buffer = io.BytesIO()
+                with zipfile.ZipFile(zip_buffer, "w", zipfile.ZIP_DEFLATED) as zip_file:
+                    for r in restaurants:
+                        if r.get("images"):
+                            for img_url in r["images"]:
+                                try:
+                                    response = requests.get(img_url, timeout=10)
+                                    if response.status_code == 200:
+                                        filename = img_url.split("/")[-1]
+                                        zip_file.writestr(f"{r['name']}_{filename}", response.content)
+                                except Exception as e:
+                                    st.warning(f"Failed to fetch {img_url}: {e}")
+                zip_buffer.seek(0)
+                st.download_button(
+                    label="Download Photos ZIP",
+                    data=zip_buffer,
+                    file_name="chicago_restaurants_photos.zip",
+                    mime="application/zip"
+                )
+    else:
+        st.info("No photos uploaded yet.")
+
 # ────────────────────────────── View All Places ──────────────────────────────
-if action == "View All Places":
+elif tab == "View All Places":
     st.header("All Places 👀")
     st.caption(f"{len(restaurants)} place(s)")
     if not restaurants:
@@ -229,10 +277,8 @@ if action == "View All Places":
                                                 format_func=lambda x: "Restaurant 🍽️" if x=="restaurant" else "Cocktail Bar 🍸",
                                                 index=0 if r.get("type")=="restaurant" else 1)
 
-                        # Visited checkbox
                         new_visited = st.checkbox("✅ I've visited this place", value=r.get("visited", False))
 
-                        # Date visited – only shown if visited
                         new_visited_date = None
                         if new_visited:
                             current_visited_date = None
@@ -333,7 +379,7 @@ if action == "View All Places":
                                 st.rerun()
 
 # ────────────────────────────── Add a Place ──────────────────────────────
-elif action == "Add a Place":
+elif tab == "Add a Place":
     st.header("Add a New Place 📍")
     with st.form("add_place_form"):
         name = st.text_input("Name*")
@@ -394,7 +440,7 @@ elif action == "Add a Place":
                     st.error(f"Failed to add place: {str(e)}")
 
 # ────────────────────────────── Random Pick ──────────────────────────────
-else:
+elif tab == "Random Pick":
     st.header("Random Place Picker 🎲")
     if not restaurants:
         st.info("Add places first!")
