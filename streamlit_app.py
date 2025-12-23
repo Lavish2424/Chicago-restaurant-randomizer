@@ -333,6 +333,7 @@ if action == "View All Places":
                                 st.rerun()
 
 # ────────────────────────────── Add a Place ──────────────────────────────
+# ────────────────────────────── Add a Place ──────────────────────────────
 elif action == "Add a Place":
     st.header("Add a New Place 📍")
     with st.form("add_place_form"):
@@ -343,12 +344,21 @@ elif action == "Add a Place":
         address = st.text_input("Address*")
         place_type = st.selectbox("Type*", ["restaurant", "cocktail_bar"],
                                   format_func=lambda x: "Restaurant 🍽️" if x=="restaurant" else "Cocktail Bar 🍸")
-
+        
         visited = st.checkbox("✅ I've already visited this place")
-
+        
         visited_date = None
         if visited:
-            visited_date = st.date_input("Date Visited", value=date.today())
+            # Allow user to pick any date, defaulting to today but fully editable
+            visited_date = st.date_input(
+                "Date Visited",
+                value=date.today(),  # defaults to today
+                help="Change this to the actual date you visited (or approximate!)"
+            )
+        else:
+            # Optional: you could allow setting a date even if not marked visited yet,
+            # but probably not needed.
+            pass
 
         uploaded_images = st.file_uploader("Upload photos", type=["png", "jpg", "jpeg", "webp"], accept_multiple_files=True)
         quick_notes = st.text_area("Quick notes (optional)", height=100)
@@ -363,8 +373,10 @@ elif action == "Add a Place":
                 if uploaded_images:
                     with st.spinner("Uploading images..."):
                         image_urls = upload_images_to_supabase(uploaded_images, name)
-
-                visited_date_str = visited_date.strftime("%B %d, %Y") if visited and visited_date else None
+                
+                visited_date_str = None
+                if visited and visited_date:
+                    visited_date_str = visited_date.strftime("%B %d, %Y")
 
                 new = {
                     "name": name.strip(),
