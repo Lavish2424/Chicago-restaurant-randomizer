@@ -61,7 +61,106 @@ st.markdown("<p style='text-align: center;'>Add, view, and randomly pick Chicago
 
 st.sidebar.header("Actions")
 action = st.sidebar.radio("What do you want to do?", ["View All Places", "Add a Place", "Random Pick"])
+# ────────────────────────────── Data Management (Collapsible) ──────────────────────────────
 st.sidebar.markdown("---")
+with st.sidebar.expander("📁 Data Management", expanded=False):
+    st.write("Backup or restore your restaurant list")
+    
+    # Download data
+    import json
+    data_to_download = {
+        "backup_date": datetime.now().isoformat(),
+        "restaurants": restaurants
+    }
+    json_string = json.dumps(data_to_download, indent=2)
+    
+    st.download_button(
+        label="💾 Download backup (JSON)",
+        data=json_string,
+        file_name=f"chicago_restaurants_backup_{date.today().isoformat()}.json",
+        mime="application/json",
+        use_container_width=True
+    )
+    
+    st.markdown("---")
+    
+    # Restore from backup
+    st.write("**Restore from backup**")
+    uploaded_backup = st.file_uploader(
+        "Upload a previously saved JSON backup",
+        type=["json"],
+        key="backup_upload"
+    )
+    
+    if uploaded_backup:
+        try:
+            backup_data = json.load(uploaded_backup)
+            new_restaurants = backup_data.get("restaurants", [])
+            
+            if not new_restaurants:
+                st.warning("Uploaded file contains no restaurant data.")
+            else:
+                st.info(f"Found {len(new_restaurants)} places in backup.")
+                if st.button("⚠️ Replace all current data with this backup", type="primary", use_container_width=True):
+                    if st.checkbox("I understand this will delete all current places and images references", value=False):
+                        # Delete all existing records in Supabase
+                        try:
+                            # First, get all current records to clean up images
+                            current = supabase.table("restaurants").select("id, images").execute().data
+                            image_paths_to_delete = []
+                            for rec in current:
+                                if rec.get("images"):
+                                    for url in rec["images"]:
+                                        try:
+                                            parsed = urllib.parse.urlparse(url)
+                                            path = parsed.path
+                                            prefix = f"/storage/v1/object/public/{BUCKET_NAME}/"
+                                            if path.startswith(prefix):
+                                                file_path = path[len(prefix):]
+                                                image_paths_to_delete.append(file_path)
+                                        except:
+                                            pass
+                            if image_paths_to_delete:
+                                supabase.storage.from_(BUCKET_NAME).remove(image_paths_to_delete)
+                            
+                            # Delete all records
+                            ids = [rec["id"] for rec in current if rec.get("id")]
+                            if ids:
+                                supabase.table("restaurants").delete().in_("id", ids).execute()
+                        except Exception as e:
+                            st.error(f"Error cleaning old data: {e}")
+                        
+                        # Insert new data
+                        try:
+                            for place in new_restaurants:
+                                # Remove local fields that shouldn't be inserted
+                                insert_place = place.copy()
+                                insert_place.pop("id", None)  # let Supabase generate new ID
+                                insert_place.pop("favorite", None)
+                                insert_place.pop("visited", None)
+                                insert_place.pop("visited_date", None)
+                                insert_place.pop("reviews", None)
+                                insert_place.pop("images", None)
+                                
+                                # Re-insert core data
+                                resp = supabase.table("restaurants").insert({
+                                    "name": insert_place.get("name"),
+                                    "cuisine": insert_place.get("cuisine"),
+                                    "price": insert_place.get("price"),
+                                    "location": insert_place.get("location"),
+                                    "address": insert_place.get("address"),
+                                    "type": insert_place.get("type", "restaurant")
+                                }).execute()
+                            
+                            st.success("✅ Backup successfully restored!")
+                            st.session_state.restaurants = load_data()
+                            st.rerun()
+                        except Exception as e:
+                            st.error(f"Failed to restore data: {str(e)}")
+                    else:
+                        st.warning("Please confirm you understand the data will be replaced.")
+        except Exception as e:
+            st.error(f"Invalid backup file: {str(e)}")
 st.sidebar.caption("Built by Alan, made for us ❤️")
 
 NEIGHBORHOODS = ["Fulton Market", "River North", "Gold Coast", "South Loop", "Chinatown", "Pilsen", "West Town", "West Loop"]
