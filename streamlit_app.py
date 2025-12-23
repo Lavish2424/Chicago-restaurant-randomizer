@@ -311,9 +311,12 @@ if action == "View All Places":
 elif action == "Add a Place":
     st.header("Add a New Place 📍")
     
-    # Initialize the default visited date once
-    if "add_visited_date" not in st.session_state:
-        st.session_state.add_visited_date = date.today()
+    # Checkbox and conditional date input OUTSIDE the form for reliable interaction
+    visited = st.checkbox("✅ I've already visited this place")
+    
+    visited_date = None
+    if visited:
+        visited_date = st.date_input("Date Visited", value=date.today())
     
     with st.form("add_place_form"):
         name = st.text_input("Name*")
@@ -324,24 +327,11 @@ elif action == "Add a Place":
         place_type = st.selectbox("Type*", ["restaurant", "cocktail_bar"],
                                   format_func=lambda x: "Restaurant 🍽️" if x=="restaurant" else "Cocktail Bar 🍸")
         
-        visited = st.checkbox("✅ I've already visited this place")
-        
-        visited_date = None
-        if visited:
-            # The date_input is only created when checkbox is checked
-            # Using a unique key and session_state value makes it fully editable
-            visited_date = st.date_input(
-                "Date Visited",
-                value=st.session_state.add_visited_date,
-                key="add_visited_date_input"
-            )
-            # Keep the selected value for the next interaction
-            st.session_state.add_visited_date = visited_date
-        
         uploaded_images = st.file_uploader("Upload photos", type=["png", "jpg", "jpeg", "webp"], accept_multiple_files=True)
         quick_notes = st.text_area("Quick notes (optional)", height=100)
         
-        if st.form_submit_button("Add Place", type="primary"):
+        submitted = st.form_submit_button("Add Place", type="primary")
+        if submitted:
             if not all([name.strip(), address.strip()]):
                 st.error("Name and address required")
             elif any(r["name"].lower() == name.lower().strip() for r in restaurants):
@@ -376,8 +366,6 @@ elif action == "Add a Place":
                 try:
                     supabase.table("restaurants").insert(new).execute()
                     st.session_state.restaurants = load_data()
-                    # Reset date for next addition
-                    st.session_state.add_visited_date = date.today()
                     st.success(f"{name} added!")
                     st.rerun()
                 except Exception as e:
