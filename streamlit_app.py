@@ -1,7 +1,7 @@
 import streamlit as st
 import random
 import urllib.parse
-from datetime import datetime
+from datetime import datetime, date
 from supabase import create_client, Client
 import os
 
@@ -13,15 +13,14 @@ BUCKET_NAME = "restaurant-images"
 
 def load_data():
     try:
-        response = supabase.table("restaurants").select("*").order("added_date", desc=True).execute()
+        response = supabase.table("restaurants").select("*").execute()
         data = response.data
         for place in data:
             place.setdefault("favorite", False)
             place.setdefault("visited", False)
+            place.setdefault("visited_date", None)  # New field
             place.setdefault("reviews", [])
             place.setdefault("images", [])
-            if "added_date" not in place:
-                place["added_date"] = datetime.now().isoformat()
         return data
     except Exception as e:
         st.error(f"Error loading data: {str(e)}")
@@ -40,9 +39,9 @@ def save_data(data):
                 "type": place["type"],
                 "favorite": place.get("favorite", False),
                 "visited": place.get("visited", False),
+                "visited_date": place.get("visited_date"),
                 "reviews": place["reviews"],
-                "images": place.get("images", []),
-                "added_date": place.get("added_date")
+                "images": place.get("images", [])
             }
             if place_id:
                 supabase.table("restaurants").update(update_data).eq("id", place_id).execute()
@@ -72,11 +71,22 @@ VISITED_OPTIONS = ["All", "Visited Only", "Not Visited Yet"]
 def delete_restaurant(index):
     r = restaurants[index]
     if r.get("images"):
-        paths_to_delete = [urllib.parse.urlparse(url).path.split(f"/{BUCKET_NAME}/")[-1] for url in r["images"]]
-        try:
-            supabase.storage.from_(BUCKET_NAME).remove(paths_to_delete)
-        except:
-            pass
+        paths_to_delete = []
+        for url in r["images"]:
+            try:
+                parsed = urllib.parse.urlparse(url)
+                path = parsed.path
+                prefix = f"/storage/v1/object/public/{BUCKET_NAME}/"
+                if path.startswith(prefix):
+                    file_path = path[len(prefix):]
+                    paths_to_delete.append(file_path)
+            except:
+                pass
+        if paths_to_delete:
+            try:
+                supabase.storage.from_(BUCKET_NAME).remove(paths_to_delete)
+            except:
+                pass
     if "id" in r:
         supabase.table("restaurants").delete().eq("id", r["id"]).execute()
     del restaurants[index]
@@ -92,6 +102,7 @@ def toggle_favorite(idx):
 
 def toggle_visited(idx):
     restaurants[idx]["visited"] = not restaurants[idx].get("visited", False)
+    # If unvisiting, optionally clear the date – here we keep it for history
     save_data(restaurants)
     st.session_state.restaurants = load_data()
     st.rerun()
@@ -130,7 +141,7 @@ if action == "View All Places":
         with col_search:
             search_term = st.text_input("🔍 Search name, cuisine, neighborhood, address", key="search_input")
         with col_sort:
-            sort_option = st.selectbox("Sort by", ["A-Z (Name)", "Latest Added", "Favorites First"])
+            sort_option = st.selectbox("Sort by", ["A-Z (Name)", "Favorites First"])
 
         filtered = restaurants.copy()
         if search_term:
@@ -141,8 +152,6 @@ if action == "View All Places":
 
         if sort_option == "A-Z (Name)":
             sorted_places = sorted(filtered, key=lambda x: x["name"].lower())
-        elif sort_option == "Latest Added":
-            sorted_places = sorted(filtered, key=lambda x: x.get("added_date", ""), reverse=True)
         else:
             sorted_places = sorted([r for r in filtered if r.get("favorite")], key=lambda x: x["name"].lower()) + \
                             sorted([r for r in filtered if not r.get("favorite")], key=lambda x: x["name"].lower())
@@ -152,13 +161,12 @@ if action == "View All Places":
             icon = " 🍸" if r.get("type") == "cocktail_bar" else " 🍽️"
             fav = " ❤️" if r.get("favorite") else ""
             visited = " ✅" if r.get("visited") else ""
+            visited_date_str = f" (visited {r['visited_date']})" if r.get("visited") and r.get("visited_date") else ""
             img_count = f" • {len(r.get('images', []))} photo{'s' if len(r.get('images', [])) > 1 else ''}" if r.get("images") else ""
             notes_count = f" • {len(r['reviews'])} note{'s' if len(r['reviews']) != 1 else ''}" if r["reviews"] else ""
 
-            added_date_str = datetime.fromisoformat(r["added_date"]).strftime("%B %d, %Y")
-            expander_title = f"{r['name']}{icon}{fav}{visited} • {r['cuisine']} • {r['price']} • {r['location']}{img_count}{notes_count} • Added: {added_date_str}"
-
-            with st.expander(expander_title, expanded=(f"edit_mode_{global_idx}" in st.session_state)):
+            with st.expander(f"{r['name']}{icon}{fav}{visited}{visited_date_str} • {r['cuisine']} • {r['price']} • {r['location']}{img_count}{notes_count}",
+                             expanded=(f"edit_mode_{global_idx}" in st.session_state)):
                 if f"edit_mode_{global_idx}" not in st.session_state:
                     btn1, btn2, btn3, btn4 = st.columns(4)
                     with btn1:
@@ -221,9 +229,19 @@ if action == "View All Places":
                                                 format_func=lambda x: "Restaurant 🍽️" if x=="restaurant" else "Cocktail Bar 🍸",
                                                 index=0 if r.get("type")=="restaurant" else 1)
 
-                        # New: Edit Date Added
-                        current_date = datetime.fromisoformat(r["added_date"]).date()
-                        new_date = st.date_input("Date Added*", value=current_date)
+                        # Visited checkbox
+                        new_visited = st.checkbox("✅ I've visited this place", value=r.get("visited", False))
+
+                        # Date visited – only shown if visited
+                        new_visited_date = None
+                        if new_visited:
+                            current_visited_date = None
+                            if r.get("visited_date"):
+                                try:
+                                    current_visited_date = datetime.strptime(r["visited_date"], "%B %d, %Y").date()
+                                except:
+                                    current_visited_date = date.today()
+                            new_visited_date = st.date_input("Date Visited", value=current_visited_date or date.today())
 
                         st.write("**Current Photos**")
                         if r.get("images"):
@@ -275,7 +293,7 @@ if action == "View All Places":
                                     for img_idx in sorted(st.session_state[f"images_to_delete_{global_idx}"], reverse=True):
                                         deleted_url = current_images.pop(img_idx)
                                         try:
-                                            file_path = urllib.parse.urlparse(deleted_url).path.split(f"/{BUCKET_NAME}/")[-1]
+                                            file_path = urllib.parse.urlparse(deleted_url).path[len(f"/storage/v1/object/public/{BUCKET_NAME}/"):]
                                             supabase.storage.from_(BUCKET_NAME).remove([file_path])
                                         except:
                                             pass
@@ -294,7 +312,7 @@ if action == "View All Places":
                                         "date": datetime.now().strftime("%B %d, %Y")
                                     })
 
-                                new_added_date = datetime.combine(new_date, datetime.min.time()).isoformat()
+                                visited_date_str = new_visited_date.strftime("%B %d, %Y") if new_visited and new_visited_date else None
 
                                 r.update({
                                     "name": new_name.strip(),
@@ -303,8 +321,9 @@ if action == "View All Places":
                                     "location": new_location,
                                     "address": new_address.strip(),
                                     "type": new_type,
-                                    "images": current_images,
-                                    "added_date": new_added_date
+                                    "visited": new_visited,
+                                    "visited_date": visited_date_str,
+                                    "images": current_images
                                 })
 
                                 save_data(restaurants)
@@ -324,11 +343,12 @@ elif action == "Add a Place":
         address = st.text_input("Address*")
         place_type = st.selectbox("Type*", ["restaurant", "cocktail_bar"],
                                   format_func=lambda x: "Restaurant 🍽️" if x=="restaurant" else "Cocktail Bar 🍸")
-        visited = st.checkbox("✅ I've already visited")
 
-        # New: Date Added when creating a place
-        added_date = st.date_input("Date Added (optional - defaults to today)", value=datetime.today())
-        added_date_iso = datetime.combine(added_date, datetime.min.time()).isoformat()
+        visited = st.checkbox("✅ I've already visited this place")
+
+        visited_date = None
+        if visited:
+            visited_date = st.date_input("Date Visited", value=date.today())
 
         uploaded_images = st.file_uploader("Upload photos", type=["png", "jpg", "jpeg", "webp"], accept_multiple_files=True)
         quick_notes = st.text_area("Quick notes (optional)", height=100)
@@ -343,6 +363,9 @@ elif action == "Add a Place":
                 if uploaded_images:
                     with st.spinner("Uploading images..."):
                         image_urls = upload_images_to_supabase(uploaded_images, name)
+
+                visited_date_str = visited_date.strftime("%B %d, %Y") if visited and visited_date else None
+
                 new = {
                     "name": name.strip(),
                     "cuisine": cuisine,
@@ -352,9 +375,9 @@ elif action == "Add a Place":
                     "type": place_type,
                     "favorite": False,
                     "visited": visited,
+                    "visited_date": visited_date_str,
                     "reviews": [],
-                    "images": image_urls,
-                    "added_date": added_date_iso
+                    "images": image_urls
                 }
                 if quick_notes.strip():
                     new["reviews"].append({
@@ -409,7 +432,8 @@ else:
                     tag = " 🍸 Cocktail Bar" if c.get("type")=="cocktail_bar" else " 🍽️ Restaurant"
                     fav = " ❤️" if c.get("favorite") else ""
                     vis = " ✅ Visited" if c.get("visited") else ""
-                    st.markdown(f"# {c['name']}{tag}{fav}{vis}")
+                    vis_date = f" ({c.get('visited_date')})" if c.get("visited_date") else ""
+                    st.markdown(f"# {c['name']}{tag}{fav}{vis}{vis_date}")
 
                     st.write(f"{c['cuisine']} • {c['price']} • {c['location']}")
 
