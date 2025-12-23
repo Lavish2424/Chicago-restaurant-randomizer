@@ -311,6 +311,10 @@ if action == "View All Places":
 elif action == "Add a Place":
     st.header("Add a New Place 📍")
     
+    # Initialize session state for the date
+    if "add_visited_date_value" not in st.session_state:
+        st.session_state.add_visited_date_value = date.today()
+    
     with st.form("add_place_form"):
         name = st.text_input("Name*")
         cuisine = st.selectbox("Cuisine/Style*", CUISINES)
@@ -320,12 +324,17 @@ elif action == "Add a Place":
         place_type = st.selectbox("Type*", ["restaurant", "cocktail_bar"],
                                   format_func=lambda x: "Restaurant 🍽️" if x=="restaurant" else "Cocktail Bar 🍸")
         
-        # Moved here — right after Type
+        # Checkbox and date input right after Type
         visited = st.checkbox("✅ I've already visited this place")
         
         visited_date = None
         if visited:
-            visited_date = st.date_input("Date Visited", value=date.today())
+            visited_date = st.date_input(
+                "Date Visited",
+                value=st.session_state.add_visited_date_value,
+                key="add_visited_date_widget"
+            )
+            st.session_state.add_visited_date_value = visited_date
         
         uploaded_images = st.file_uploader("Upload photos", type=["png", "jpg", "jpeg", "webp"], accept_multiple_files=True)
         quick_notes = st.text_area("Quick notes (optional)", height=100)
@@ -366,6 +375,7 @@ elif action == "Add a Place":
                 try:
                     supabase.table("restaurants").insert(new).execute()
                     st.session_state.restaurants = load_data()
+                    st.session_state.add_visited_date_value = date.today()  # Reset for next add
                     st.success(f"{name} added!")
                     st.rerun()
                 except Exception as e:
