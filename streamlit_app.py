@@ -15,12 +15,12 @@ supabase_key = st.secrets["SUPABASE_ANON_KEY"]
 supabase: Client = create_client(supabase_url, supabase_key)
 BUCKET_NAME = "restaurant-images"
 
-# Geocoder setup - more unique and identifiable user_agent
+# Geocoder setup - very unique user_agent to better comply with policy
 geolocator = Nominatim(
-    user_agent="AlanChicagoRestaurantBarRandomizer_v2.0",
-    timeout=10
+    user_agent="AlanPersonalChicagoRestaurantBarRandomizerApp_v3.2026",
+    timeout=15
 )
-geocode = RateLimiter(geolocator.geocode, min_delay_seconds=1)
+geocode = RateLimiter(geolocator.geocode, min_delay_seconds=2)  # Increased delay for safety
 
 def load_data():
     try:
@@ -211,7 +211,6 @@ if action == "View All Places":
             with st.expander(f"{r['name']}{icon}{fav}{visited}{visited_date_str} • {r['cuisine']} • {r['price']} • {r['location']}{img_count}{notes_count}",
                              expanded=(f"edit_mode_{global_idx}" in st.session_state)):
                 if f"edit_mode_{global_idx}" not in st.session_state:
-                    # Action buttons
                     btn1, btn2, btn3, btn4 = st.columns(4)
                     with btn1:
                         if st.button("❤️ Favorite" if not r.get("favorite") else "💔 Unfavorite", key=f"fav_{global_idx}", use_container_width=True):
@@ -237,13 +236,11 @@ if action == "View All Places":
                             del st.session_state[delete_key]
                             st.rerun()
                     st.markdown("---")
-                    # Address + Map link
                     col_addr, col_map = st.columns([3, 1])
                     with col_addr:
                         st.write(f"**📍 Address:** {r.get('address', 'Not provided')}")
                     with col_map:
                         st.markdown(f"[🗺️ Open in Maps]({google_maps_link(r.get('address', ''), r['name'])})", unsafe_allow_html=True)
-                    # Notes - safe handling
                     if r["reviews"]:
                         st.markdown("**📝 Notes**")
                         for note in reversed(r["reviews"]):
@@ -252,7 +249,6 @@ if action == "View All Places":
                                     st.write(str(note).strip())
                     else:
                         st.caption("_No notes yet — be the first to add one!_")
-                    # Photos
                     if r.get("images"):
                         st.markdown("**📸 Photos**")
                         num_images = len(r["images"])
@@ -264,7 +260,6 @@ if action == "View All Places":
                                     with cols[j]:
                                         st.image(r["images"][idx], use_column_width=True)
                 else:
-                    # ==================== EDIT MODE ====================
                     st.subheader(f"Editing: {r['name']}")
                     
                     images_to_delete_key = f"images_to_delete_{global_idx}"
@@ -370,11 +365,12 @@ if action == "View All Places":
                                         if location_geo:
                                             new_lat = location_geo.latitude
                                             new_lon = location_geo.longitude
+                                            st.success("Location found and updated! 🗺️")
                                         else:
-                                            st.warning("Could not find coordinates for this address. It will not appear on the map. Try a more specific address.")
+                                            st.warning("No coordinates found for this address. Try a more detailed address.")
                                             new_lat = new_lon = None
                                     except Exception as e:
-                                        st.error(f"Geocoding error: {str(e)}")
+                                        st.error(f"Geocoding failed: {str(e)}. Check address or try again later.")
                                         new_lat = new_lon = None
                             else:
                                 new_lat = r.get("lat")
@@ -459,10 +455,11 @@ elif action == "Add a Place":
                     if geo_location:
                         lat = geo_location.latitude
                         lon = geo_location.longitude
+                        st.success("Location found! 🗺️")
                     else:
-                        st.warning("Could not find coordinates for this address — it won't appear on the map. Check spelling or add more details (e.g., '123 N Michigan Ave').")
+                        st.warning("No coordinates found for this address — try adding more details (e.g., street number).")
                 except Exception as e:
-                    st.error(f"Geocoding error: {str(e)}")
+                    st.error(f"Geocoding failed: {str(e)}. Try again or check the address.")
           
             new_reviews = [quick_notes.strip()] if quick_notes.strip() else []
           
@@ -485,7 +482,7 @@ elif action == "Add a Place":
             try:
                 supabase.table("restaurants").insert(new).execute()
                 st.session_state.restaurants = load_data()
-                st.success(f"{name} added! {'Pinned on map 🗺️' if lat and lon else 'Address not mapped yet'}")
+                st.success(f"{name} added! {'Pinned on map 🗺️' if lat and lon else 'Not mapped yet'}")
                 st.rerun()
             except Exception as e:
                 st.error(f"Failed to add place: {str(e)}")
