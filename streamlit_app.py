@@ -437,23 +437,6 @@ if action == "View All Places":
 elif action == "Map View":
     st.header("Chicago Food Map 🗺️")
 
-    # === NEW STATS DASHBOARD (METRICS ONLY) ===
-    if restaurants:
-        total_count = len(restaurants)
-        visited_count = len([r for r in restaurants if r.get("visited")])
-        if total_count > 0:
-            completion_rate = int((visited_count / total_count) * 100)
-        else:
-            completion_rate = 0
-        
-        # Display 3 Big Metrics
-        m1, m2, m3 = st.columns(3)
-        m1.metric("Total Places", total_count)
-        m2.metric("Visited", visited_count)
-        m3.metric("Completion", f"{completion_rate}%")
-        st.markdown("---")
-    # ==========================================
-
     # 1. Base Map (Using "OpenStreetMap" for full color)
     m = folium.Map(location=[41.8781, -87.6298], zoom_start=12, tiles="OpenStreetMap")
 
