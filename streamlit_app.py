@@ -6,7 +6,6 @@ from supabase import create_client, Client
 import os
 from streamlit_folium import st_folium
 import folium
-# UPDATED: Using ArcGIS instead of Nominatim for better US address accuracy
 from geopy.geocoders import ArcGIS
 
 # ==================== SUPABASE SETUP ====================
@@ -20,7 +19,7 @@ except FileNotFoundError:
 supabase: Client = create_client(supabase_url, supabase_key)
 BUCKET_NAME = "restaurant-images"
 
-# UPDATED: Initialize ArcGIS Geocoder (No API key needed, very reliable)
+# Initialize ArcGIS Geocoder (Reliable for US addresses)
 geolocator = ArcGIS(timeout=10)
 
 # ==================== HELPER FUNCTIONS ====================
@@ -33,7 +32,6 @@ def get_lat_lon(address):
             return None, None
             
         # Smart check: Only add Chicago context if it's missing entirely
-        # This prevents "Chicago, IL, Chicago, IL" errors
         if "chicago" not in clean_addr.lower() and "il" not in clean_addr.lower():
             search_query = f"{clean_addr}, Chicago, IL"
         else:
@@ -64,7 +62,7 @@ def load_data():
             place.setdefault("latitude", None)
             place.setdefault("longitude", None)
             
-            # Safely normalize reviews to list of non-empty strings
+            # Safely normalize reviews
             normalized = []
             for rev in place.get("reviews", []):
                 if rev:
@@ -443,12 +441,12 @@ if action == "View All Places":
 elif action == "Map View":
     st.header("Chicago Food Map 🗺️")
 
-    col1, col2 = st.columns(2)
-    with col1:
-        map_type_filter = st.multiselect("Filter by Type", ["restaurant", "cocktail_bar"], default=["restaurant", "cocktail_bar"], 
-                                       format_func=lambda x: "Restaurant 🍽️" if x=="restaurant" else "Cocktail Bar 🍸")
-    with col2:
-        show_favs_only = st.checkbox("Show Favorites Only ❤️")
+    # Map Legend / Key (Replaces Filters)
+    with st.container(border=True):
+        st.markdown("""
+        **Map Key:** 🔴 **Red Marker:** Favorite Place | 🔵 **Blue Marker:** Standard Place  
+        🍽️ **Icon:** Restaurant | 🍸 **Icon:** Cocktail Bar
+        """)
 
     # Base Map centered on Chicago
     m = folium.Map(location=[41.8781, -87.6298], zoom_start=12, tiles="CartoDB positron")
@@ -457,11 +455,7 @@ elif action == "Map View":
     places_skipped = 0
 
     for r in restaurants:
-        if r["type"] not in map_type_filter:
-            continue
-        if show_favs_only and not r.get("favorite"):
-            continue
-
+        # No Filters - Showing Everything
         lat = r.get("latitude")
         lon = r.get("longitude")
 
@@ -489,8 +483,10 @@ elif action == "Map View":
         else:
             places_skipped += 1
 
-    st.caption(f"Showing {places_mapped} location(s). ({places_skipped} skipped due to missing coordinates)")
-    st_folium(m, width="100%", height=500)
+    st.caption(f"Showing {places_mapped} location(s).")
+    if places_skipped > 0:
+        st.caption(f"({places_skipped} places hidden due to missing address coordinates)")
+    st_folium(m, width="100%", height=600)
 
 # ────────────────────────────── Add a Place ──────────────────────────────
 elif action == "Add a Place":
