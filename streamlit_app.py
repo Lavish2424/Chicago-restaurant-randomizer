@@ -438,7 +438,7 @@ elif action == "Map View":
     # 1. Base Map centered on Chicago
     m = folium.Map(location=[41.8781, -87.6298], zoom_start=12, tiles="CartoDB positron")
 
-    # 2. Add Floating Legend (HTML) with Emojis
+    # 2. Add Floating Legend (HTML) with FontAwesome icons that match the map
     legend_html = '''
     <div style="position: fixed; 
      bottom: 20px; right: 20px; width: 140px; height: 130px; 
@@ -446,8 +446,8 @@ elif action == "Map View":
      background-color:white; opacity: 0.9;
      padding: 10px; border-radius: 5px;">
      <b>Legend</b><br>
-     🟢 Visited<br>
-     ⚪ Not Visited<br>
+     <i class="fa fa-map-marker" style="color:green; font-size:16px;"></i>&nbsp; Visited<br>
+     <i class="fa fa-map-marker" style="color:gray; font-size:16px;"></i>&nbsp; Not Visited<br>
      <br>
      🍽️ Restaurant<br>
      🍸 Cocktail Bar
@@ -468,9 +468,7 @@ elif action == "Map View":
             # Logic for Colors: Green (Visited) vs Gray (Not Visited)
             color = "green" if r.get("visited") else "gray"
             
-            # UPDATED: Using 'glyphicon' instead of 'fa' for better stability
-            # 'glass' in glyphicon = Martini Glass
-            # 'cutlery' in glyphicon = Knife & Fork
+            # UPDATED: Using 'glyphicon' so the martini glass works reliably
             if r["type"] == "cocktail_bar":
                 icon_name = "glass"
                 icon_prefix = "glyphicon"
