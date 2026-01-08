@@ -438,19 +438,19 @@ elif action == "Map View":
     # 1. Base Map centered on Chicago
     m = folium.Map(location=[41.8781, -87.6298], zoom_start=12, tiles="CartoDB positron")
 
-    # 2. Add Floating Legend (HTML)
+    # 2. Add Floating Legend (HTML) with NEW colors/icons
     legend_html = '''
     <div style="position: fixed; 
-     bottom: 20px; right: 20px; width: 170px; height: 140px; 
+     bottom: 20px; right: 20px; width: 150px; height: 130px; 
      border:2px solid grey; z-index:9999; font-size:14px;
      background-color:white; opacity: 0.85;
      padding: 10px; border-radius: 5px;">
      <b>Legend</b><br>
-     <i class="fa fa-map-marker" style="color:red; font-size:18px"></i>&nbsp; Favorite<br>
-     <i class="fa fa-map-marker" style="color:blue; font-size:18px"></i>&nbsp; Standard<br>
+     <i class="fa fa-map-marker" style="color:green; font-size:18px"></i>  Visited<br>
+     <i class="fa fa-map-marker" style="color:lightgray; font-size:18px"></i>  Not Visited<br>
      <br>
-     <i class="fa fa-cutlery" style="color:black"></i>&nbsp; Restaurant<br>
-     <i class="fa fa-glass" style="color:black"></i>&nbsp; Cocktail Bar
+     <i class="fa fa-cutlery" style="color:black"></i>  Restaurant<br>
+     <i class="fa fa-glass" style="color:black"></i>  Cocktail Bar
     </div>
     '''
     m.get_root().html.add_child(folium.Element(legend_html))
@@ -465,7 +465,10 @@ elif action == "Map View":
         if lat is not None and lon is not None:
             places_mapped += 1
             
-            color = "red" if r.get("favorite") else "blue"
+            # UPDATED Logic for Colors
+            color = "green" if r.get("visited") else "lightgray"
+            
+            # UPDATED Logic for Icons
             icon_type = "glass" if r["type"] == "cocktail_bar" else "cutlery"
             
             html = f"""
