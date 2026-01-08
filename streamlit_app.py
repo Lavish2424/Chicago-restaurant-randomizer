@@ -196,6 +196,7 @@ if action == "View All Places":
             with st.expander(f"{r['name']}{icon}{fav}{visited}{visited_date_str} • {r['cuisine']} • {r['price']} • {r['location']}{img_count}{notes_count}",
                              expanded=(f"edit_mode_{global_idx}" in st.session_state)):
                 if f"edit_mode_{global_idx}" not in st.session_state:
+                    # Action buttons
                     btn1, btn2, btn3, btn4 = st.columns(4)
                     with btn1:
                         if st.button("❤️ Favorite" if not r.get("favorite") else "💔 Unfavorite", key=f"fav_{global_idx}", use_container_width=True):
@@ -220,27 +221,38 @@ if action == "View All Places":
                         if st.button("Cancel Delete", key=f"can_{global_idx}", use_container_width=True):
                             del st.session_state[delete_key]
                             st.rerun()
+
                     st.markdown("---")
-                    st.write(f"**Address:** {r.get('address', 'Not provided')}")
-                    st.markdown(f"[📍 Open in Google Maps]({google_maps_link(r.get('address', ''), r['name'])})")
-                    st.markdown("---")
+
+                    # Compact two-column address + map link
+                    col_addr, col_map = st.columns([3, 1])
+                    with col_addr:
+                        st.write(f"**📍 Address:** {r.get('address', 'Not provided')}")
+                    with col_map:
+                        st.markdown(f"[🗺️ Open in Maps]({google_maps_link(r.get('address', ''), r['name'])})", unsafe_allow_html=True)
+
+                    # Compact notes in bordered cards
                     if r["reviews"]:
-                        st.markdown("**Notes**")
+                        st.markdown("**📝 Notes**")
                         for rev in reversed(r["reviews"]):
-                            st.write(f"**{rev['reviewer']} ({rev['date']})**")
-                            st.write(rev['comment'])
-                            st.markdown("---")
+                            with st.container(border=True):
+                                st.caption(f"{rev['reviewer']} — {rev['date']}")
+                                st.write(rev['comment'])
                     else:
-                        st.write("_No notes yet — be the first!_")
+                        st.caption("_No notes yet — be the first to add one!_")
+
+                    # Photos (only if present)
                     if r.get("images"):
-                        st.markdown("---")
-                        st.write("**Photos**")
-                        for i in range(0, len(r["images"]), 3):
+                        st.markdown("**📸 Photos**")
+                        num_images = len(r["images"])
+                        for i in range(0, num_images, 3):
                             cols = st.columns(3)
-                            for j, col in enumerate(cols):
-                                if i + j < len(r["images"]):
-                                    with col:
-                                        st.image(r["images"][i + j], use_column_width=True)
+                            for j in range(3):
+                                idx = i + j
+                                if idx < num_images:
+                                    with cols[j]:
+                                        st.image(r["images"][idx], use_column_width=True)
+
                 else:
                     # ==================== EDIT MODE ====================
                     st.subheader(f"Editing: {r['name']}")
@@ -316,7 +328,6 @@ if action == "View All Places":
                             st.write("")
                             st.write(f"_{rev['reviewer']}_  \n{rev['date']}")
 
-                        # Live update comment
                         if new_comment != rev["comment"]:
                             st.session_state[reviews_key][rev_idx]["comment"] = new_comment
 
@@ -407,6 +418,9 @@ if action == "View All Places":
                             if reviews_key in st.session_state:
                                 del st.session_state[reviews_key]
                             st.rerun()
+
+# The rest of the code (Add a Place, Map, Random Pick) remains unchanged
+# (Included below for completeness)
 
 # ────────────────────────────── Add a Place ──────────────────────────────
 elif action == "Add a Place":
