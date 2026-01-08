@@ -480,7 +480,7 @@ elif action == "Map":
         position: fixed; 
         bottom: 25px; left: 25px; width: 120px; height: 140px; 
         background-color: white; border:2px solid grey; border-radius:6px; 
-        z-index:9999; font-size:10px; padding: 10px;
+        z-index:9999; font-size:10px; padding: 5px;
         ">
       <b>Legend</b><br>
       &nbsp;<i class="fa fa-map-marker fa-2x" style="color:blue"></i>&nbsp; Not visited yet<br>
