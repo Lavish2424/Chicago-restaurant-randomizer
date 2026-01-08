@@ -172,7 +172,13 @@ st.markdown("<h1 style='text-align: center;'>🍽️🍸 Chicago Restaurant/Bar 
 st.markdown("<p style='text-align: center;'>Add, view, and randomly pick Chicago eats & drinks!</p>", unsafe_allow_html=True)
 
 st.sidebar.header("Actions")
-action = st.sidebar.radio("What do you want to do?", ["View All Places", "Map View", "Add a Place", "Random Pick"])
+
+# UPDATED: Added a 'key' to this widget so we can control it programmatically
+action = st.sidebar.radio(
+    "What do you want to do?", 
+    ["View All Places", "Map View", "Add a Place", "Random Pick"],
+    key="nav_selection" 
+)
 
 # Clear session state on tab change
 if "previous_action" not in st.session_state:
@@ -446,8 +452,8 @@ elif action == "Map View":
      background-color:white; opacity: 0.9;
      padding: 10px; border-radius: 5px;">
      <b>Legend</b><br>
-     <i class="fa fa-map-marker" style="color:green; font-size:16px;"></i>&nbsp; Visited<br>
-     <i class="fa fa-map-marker" style="color:gray; font-size:16px;"></i>&nbsp; Not Visited<br>
+     <i class="fa fa-map-marker" style="color:green; font-size:16px;"></i>  Visited<br>
+     <i class="fa fa-map-marker" style="color:gray; font-size:16px;"></i>  Not Visited<br>
      <br>
      🍽️ Restaurant<br>
      🍸 Cocktail Bar
@@ -532,7 +538,8 @@ elif action == "Add a Place":
             if lat is None:
                 st.warning("⚠️ Could not find specific coordinates for this address. It will save, but won't appear on the map pin.")
             else:
-                st.success("✅ Location found and pinned!")
+                # Use st.toast for feedback since we are about to redirect
+                st.toast("✅ Location found!")
 
             image_urls = []
             if uploaded_images:
@@ -561,8 +568,12 @@ elif action == "Add a Place":
             try:
                 supabase.table("restaurants").insert(new).execute()
                 st.session_state.restaurants = load_data()
-                st.success(f"{name} added successfully!")
+                
+                # UPDATED: Redirect Logic
+                st.success(f"{name} added successfully! Redirecting...")
+                st.session_state.nav_selection = "View All Places"
                 st.rerun()
+                
             except Exception as e:
                 st.error(f"Failed to add place: {str(e)}")
 
