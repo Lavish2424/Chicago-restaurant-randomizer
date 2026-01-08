@@ -268,20 +268,22 @@ if action == "View All Places":
                         except:
                             pass
 
-                    # Only default to today if visited is checked AND no existing date
+                    # Default to today only if visited and no existing date; otherwise use existing or None
                     if edit_visited and existing_date is None:
                         default_edit_date = date.today()
                     else:
-                        default_edit_date = existing_date  # Will be None if no date saved
+                        default_edit_date = existing_date  # None if no date
 
+                    # FORCE allow clearing by always allowing value=None (the clear "x" appears when a date is selected)
                     edit_visited_date = st.date_input(
                         "Date Visited (optional)",
                         value=default_edit_date,
+                        value=None,  # This is the key: allows clearing even when default is set
                         key=f"edit_visited_date_{global_idx}"
                     )
 
-                    # Fixed: Safe handling for both None and manual clear
-                    if edit_visited_date is None or edit_visited_date.year < 1000:
+                    # Safe handling: treat ancient year or None as cleared
+                    if edit_visited_date is None or (hasattr(edit_visited_date, 'year') and edit_visited_date.year < 1000):
                         visited_date_edit = None
                     else:
                         visited_date_edit = edit_visited_date
@@ -388,11 +390,11 @@ elif action == "Add a Place":
     visited_date_input = st.date_input(
         "Date Visited (optional)",
         value=default_date,
+        value=None,  # Allows the clear "x" button
         key="visited_date_key"
     )
     
-    # Safe handling for both initial None and manual clear
-    if visited_date_input is None or visited_date_input.year < 1000:
+    if visited_date_input is None or (hasattr(visited_date_input, 'year') and visited_date_input.year < 1000):
         visited_date = None
     else:
         visited_date = visited_date_input
