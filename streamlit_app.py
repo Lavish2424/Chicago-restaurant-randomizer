@@ -19,7 +19,7 @@ except FileNotFoundError:
 supabase: Client = create_client(supabase_url, supabase_key)
 BUCKET_NAME = "restaurant-images"
 
-# Initialize ArcGIS Geocoder (Reliable for US addresses)
+# Initialize ArcGIS Geocoder
 geolocator = ArcGIS(timeout=10)
 
 # ==================== HELPER FUNCTIONS ====================
@@ -31,20 +31,15 @@ def get_lat_lon(address):
         if not clean_addr:
             return None, None
             
-        # Smart check: Only add Chicago context if it's missing entirely
         if "chicago" not in clean_addr.lower() and "il" not in clean_addr.lower():
             search_query = f"{clean_addr}, Chicago, IL"
         else:
             search_query = clean_addr
             
         location = geolocator.geocode(search_query)
-        
         if location:
             return location.latitude, location.longitude
-        else:
-            print(f"Could not find: {search_query}")
-            return None, None
-            
+        return None, None
     except Exception as e:
         print(f"Geocoding error: {e}")
         return None, None
@@ -62,7 +57,6 @@ def load_data():
             place.setdefault("latitude", None)
             place.setdefault("longitude", None)
             
-            # Safely normalize reviews
             normalized = []
             for rev in place.get("reviews", []):
                 if rev:
@@ -441,21 +435,30 @@ if action == "View All Places":
 elif action == "Map View":
     st.header("Chicago Food Map 🗺️")
 
-    # Map Legend / Key (Replaces Filters)
-    with st.container(border=True):
-        st.markdown("""
-        **Map Key:** 🔴 **Red Marker:** Favorite Place | 🔵 **Blue Marker:** Standard Place  
-        🍽️ **Icon:** Restaurant | 🍸 **Icon:** Cocktail Bar
-        """)
-
-    # Base Map centered on Chicago
+    # 1. Base Map centered on Chicago
     m = folium.Map(location=[41.8781, -87.6298], zoom_start=12, tiles="CartoDB positron")
+
+    # 2. Add Floating Legend (HTML)
+    legend_html = '''
+    <div style="position: fixed; 
+     bottom: 20px; right: 20px; width: 170px; height: 140px; 
+     border:2px solid grey; z-index:9999; font-size:14px;
+     background-color:white; opacity: 0.85;
+     padding: 10px; border-radius: 5px;">
+     <b>Legend</b><br>
+     <i class="fa fa-map-marker" style="color:red; font-size:18px"></i>&nbsp; Favorite<br>
+     <i class="fa fa-map-marker" style="color:blue; font-size:18px"></i>&nbsp; Standard<br>
+     <br>
+     <i class="fa fa-cutlery" style="color:black"></i>&nbsp; Restaurant<br>
+     <i class="fa fa-glass" style="color:black"></i>&nbsp; Cocktail Bar
+    </div>
+    '''
+    m.get_root().html.add_child(folium.Element(legend_html))
 
     places_mapped = 0
     places_skipped = 0
 
     for r in restaurants:
-        # No Filters - Showing Everything
         lat = r.get("latitude")
         lon = r.get("longitude")
 
@@ -486,6 +489,7 @@ elif action == "Map View":
     st.caption(f"Showing {places_mapped} location(s).")
     if places_skipped > 0:
         st.caption(f"({places_skipped} places hidden due to missing address coordinates)")
+        
     st_folium(m, width="100%", height=600)
 
 # ────────────────────────────── Add a Place ──────────────────────────────
