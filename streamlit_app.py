@@ -446,19 +446,20 @@ elif action == "Add a Place":
 # ────────────────────────────── Map ──────────────────────────────
 elif action == "Map":
     st.header("Interactive Map 🗺️")
-    
+   
     places_with_coords = [r for r in restaurants if r.get("lat") and r.get("lon")]
-    
+   
     if not places_with_coords:
         st.info("No places with coordinates yet. Add places with valid Chicago addresses to see them on the map!")
         st.stop()
-    
+   
     m = folium.Map(location=[41.8781, -87.6298], zoom_start=12, tiles="OpenStreetMap")
-    
+   
+    # Add markers
     for place in places_with_coords:
         icon_color = "red" if place.get("visited") else "blue"
         icon_symbol = "cutlery" if place["type"] == "restaurant" else "glass-martini"
-        
+       
         popup_html = f"""
         <b>{place['name']}</b><br>
         {place['cuisine']} • {place['price']} • {place['location']}<br>
@@ -466,15 +467,33 @@ elif action == "Map":
         {"Visited: " + place.get('visited_date', '') if place.get('visited') else "Not visited yet"}
         """
         popup = folium.Popup(popup_html, max_width=300)
-        
+       
         folium.Marker(
             [place['lat'], place['lon']],
             popup=popup,
             tooltip=place['name'],
             icon=folium.Icon(color=icon_color, icon=icon_symbol, prefix='fa')
         ).add_to(m)
-    
-    st_folium(m, width=700, height=500)
+   
+    # ==================== ADD LEGEND ====================
+    legend_html = '''
+    <div style="
+        position: fixed; 
+        bottom: 50px; left: 50px; width: 180px; height: 140px; 
+        background-color: white; border:2px solid grey; border-radius:6px; 
+        z-index:9999; font-size:14px; padding: 10px;
+        ">
+      <b>Legend</b><br>
+      &nbsp;<i class="fa fa-map-marker fa-2x" style="color:blue"></i>&nbsp; Not visited yet<br>
+      &nbsp;<i class="fa fa-map-marker fa-2x" style="color:red"></i>&nbsp; Already visited<br><br>
+      &nbsp;<i class="fa fa-cutlery fa-2x" style="color:gray"></i>&nbsp; Restaurant<br>
+      &nbsp;<i class="fa fa-glass-martini fa-2x" style="color:gray"></i>&nbsp; Cocktail Bar
+    </div>
+    '''
+    m.get_root().html.add_child(folium.Element(legend_html))
+   
+    # Display the map
+    st_folium(m, width=700, height=500, key="map")
 
 # ────────────────────────────── Random Pick ──────────────────────────────
 else:
