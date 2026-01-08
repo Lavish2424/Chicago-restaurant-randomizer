@@ -438,19 +438,20 @@ elif action == "Map View":
     # 1. Base Map centered on Chicago
     m = folium.Map(location=[41.8781, -87.6298], zoom_start=12, tiles="CartoDB positron")
 
-    # 2. Add Floating Legend (HTML) with NEW colors/icons
+    # 2. Add Floating Legend (HTML) with Emojis to ensure visibility
+    # Note: Using Emojis 🟢/⚪ for colors is safer in the Legend div than FontAwesome classes
     legend_html = '''
     <div style="position: fixed; 
-     bottom: 20px; right: 20px; width: 150px; height: 130px; 
+     bottom: 20px; right: 20px; width: 140px; height: 130px; 
      border:2px solid grey; z-index:9999; font-size:14px;
-     background-color:white; opacity: 0.85;
+     background-color:white; opacity: 0.9;
      padding: 10px; border-radius: 5px;">
      <b>Legend</b><br>
-     <i class="fa fa-map-marker" style="color:green; font-size:18px"></i>  Visited<br>
-     <i class="fa fa-map-marker" style="color:lightgray; font-size:18px"></i>  Not Visited<br>
+     🟢 Visited<br>
+     ⚪ Not Visited<br>
      <br>
-     <i class="fa fa-cutlery" style="color:black"></i>  Restaurant<br>
-     <i class="fa fa-glass" style="color:black"></i>  Cocktail Bar
+     🍽️ Restaurant<br>
+     🍸 Cocktail Bar
     </div>
     '''
     m.get_root().html.add_child(folium.Element(legend_html))
@@ -465,11 +466,12 @@ elif action == "Map View":
         if lat is not None and lon is not None:
             places_mapped += 1
             
-            # UPDATED Logic for Colors
-            color = "green" if r.get("visited") else "lightgray"
+            # Logic for Colors: Green (Visited) vs Gray (Not Visited)
+            color = "green" if r.get("visited") else "gray"
             
-            # UPDATED Logic for Icons
-            icon_type = "glass" if r["type"] == "cocktail_bar" else "cutlery"
+            # Logic for Icons: Glass (Cocktail) vs Cutlery (Restaurant)
+            # Prefix 'fa' is required for these standard icons
+            icon_name = "glass" if r["type"] == "cocktail_bar" else "cutlery"
             
             html = f"""
             <div style="font-family: sans-serif; width: 200px;">
@@ -484,7 +486,7 @@ elif action == "Map View":
                 [lat, lon],
                 popup=folium.Popup(html, max_width=250),
                 tooltip=r["name"],
-                icon=folium.Icon(color=color, icon=icon_type, prefix='fa')
+                icon=folium.Icon(color=color, icon=icon_name, prefix='fa')
             ).add_to(m)
         else:
             places_skipped += 1
