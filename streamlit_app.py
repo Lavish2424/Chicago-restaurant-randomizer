@@ -7,6 +7,8 @@ import os
 from streamlit_folium import st_folium
 import folium
 from geopy.geocoders import ArcGIS
+# NEW IMPORT for User Location
+from streamlit_js_eval import get_geolocation
 
 # ==================== SUPABASE SETUP ====================
 try:
@@ -19,7 +21,7 @@ except FileNotFoundError:
 supabase: Client = create_client(supabase_url, supabase_key)
 BUCKET_NAME = "restaurant-images"
 
-# Initialize ArcGIS Geocoder
+# Initialize ArcGIS Geocoder (Reliable for US addresses)
 geolocator = ArcGIS(timeout=10)
 
 # ==================== HELPER FUNCTIONS ====================
@@ -435,17 +437,48 @@ if action == "View All Places":
 elif action == "Map View":
     st.header("Chicago Food Map 🗺️")
 
-    # 1. Base Map (Using "OpenStreetMap" for full color)
-    m = folium.Map(location=[41.8781, -87.6298], zoom_start=12, tiles="OpenStreetMap")
+    # 1. Get User Location (Browser GPS)
+    loc = get_geolocation()
+    user_lat, user_lon = None, None
+    if loc and 'coords' in loc:
+        user_lat = loc['coords']['latitude']
+        user_lon = loc['coords']['longitude']
 
-    # 2. Add Floating Legend (HTML) with FontAwesome icons that match the map
+    # 2. Map Controls
+    col_center, col_blank = st.columns([2, 4])
+    with col_center:
+        center_on_me = st.checkbox("📍 Center on Me")
+
+    # 3. Determine Map Center
+    # Default Chicago
+    map_center = [41.8781, -87.6298] 
+    zoom_level = 12
+    
+    if center_on_me and user_lat:
+        map_center = [user_lat, user_lon]
+        zoom_level = 15
+
+    # 4. Base Map
+    m = folium.Map(location=map_center, zoom_start=zoom_level, tiles="CartoDB positron")
+
+    # 5. Add "You are Here" Marker
+    if user_lat:
+        folium.Marker(
+            [user_lat, user_lon],
+            popup="You are here!",
+            tooltip="Current Location",
+            icon=folium.Icon(color="blue", icon="user", prefix="fa")
+        ).add_to(m)
+
+    # 6. Add Floating Legend (HTML) with FontAwesome icons that match the map
     legend_html = '''
     <div style="position: fixed; 
-     bottom: 20px; right: 20px; width: 140px; height: 130px; 
+     bottom: 20px; right: 20px; width: 140px; height: 160px; 
      border:2px solid grey; z-index:9999; font-size:14px;
      background-color:white; opacity: 0.9;
      padding: 10px; border-radius: 5px;">
      <b>Legend</b><br>
+     <i class="fa fa-map-marker" style="color:blue; font-size:16px;"></i>  You<br>
      <i class="fa fa-map-marker" style="color:green; font-size:16px;"></i>  Visited<br>
      <i class="fa fa-map-marker" style="color:gray; font-size:16px;"></i>  Not Visited<br>
      <br>
