@@ -437,7 +437,6 @@ elif action == "Add a Place":
             try:
                 supabase.table("restaurants").insert(new).execute()
                 st.session_state.restaurants = load_data()
-                st.session_state["visited_date_key"] = None
                 st.success(f"{name} added and pinned on the map!")
                 st.rerun()
             except Exception as e:
