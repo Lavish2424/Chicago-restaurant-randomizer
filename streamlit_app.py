@@ -27,19 +27,23 @@ def load_data():
             place.setdefault("favorite", False)
             place.setdefault("visited", False)
             place.setdefault("visited_date", None)
-            place.setdefault("reviews", [])  # Now just list of strings or dicts with only "comment"
+            place.setdefault("reviews", [])
             place.setdefault("images", [])
             place.setdefault("lat", None)
             place.setdefault("lon", None)
-            # Normalize old reviews to just comments
+
+            # Safely normalize reviews to list of non-empty strings
             normalized = []
-            for rev in place["reviews"]:
-                if isinstance(rev, str):
-                    normalized.append(rev)
-                elif isinstance(rev, dict) and "comment" in rev:
-                    normalized.append(rev["comment"])
-                elif isinstance(rev, dict):
-                    normalized.append("")
+            for rev in place.get("reviews", []):
+                if rev:
+                    if isinstance(rev, dict) and "comment" in rev:
+                        cleaned = str(rev["comment"]).strip()
+                    elif isinstance(rev, str):
+                        cleaned = str(rev).strip()
+                    else:
+                        cleaned = ""
+                    if cleaned:
+                        normalized.append(cleaned)
             place["reviews"] = normalized
         return data
     except Exception as e:
@@ -60,7 +64,7 @@ def save_data(data):
                 "favorite": place.get("favorite", False),
                 "visited": place.get("visited", False),
                 "visited_date": place.get("visited_date"),
-                "reviews": place["reviews"],  # Now list of strings
+                "reviews": place["reviews"],
                 "images": place.get("images", []),
                 "lat": place.get("lat"),
                 "lon": place.get("lon")
@@ -241,13 +245,13 @@ if action == "View All Places":
                     with col_map:
                         st.markdown(f"[🗺️ Open in Maps]({google_maps_link(r.get('address', ''), r['name'])})", unsafe_allow_html=True)
 
-                    # Notes (just the text)
+                    # Notes - safe handling
                     if r["reviews"]:
                         st.markdown("**📝 Notes**")
                         for note in reversed(r["reviews"]):
-                            if note.strip():
+                            if note and str(note).strip():
                                 with st.container(border=True):
-                                    st.write(note)
+                                    st.write(str(note).strip())
                     else:
                         st.caption("_No notes yet — be the first to add one!_")
 
@@ -308,11 +312,11 @@ if action == "View All Places":
                                 if st.checkbox("Delete this photo", key=f"del_img_{global_idx}_{i}"):
                                     st.session_state[images_to_delete_key].add(img_url)
 
-                    # ==================== NOTES EDITING (no author/date) ====================
+                    # Notes editing
                     st.markdown("### Notes")
                     reviews_key = f"edit_reviews_{global_idx}"
                     if reviews_key not in st.session_state:
-                        st.session_state[reviews_key] = r["reviews"][:]  # list of strings
+                        st.session_state[reviews_key] = r["reviews"][:]
 
                     current_reviews = st.session_state[reviews_key]
 
@@ -321,7 +325,7 @@ if action == "View All Places":
                         with col1:
                             new_note = st.text_area(
                                 "Note",
-                                value=note,
+                                value=note or "",
                                 key=f"rev_comment_{global_idx}_{rev_idx}",
                                 label_visibility="collapsed",
                                 height=100
@@ -382,6 +386,8 @@ if action == "View All Places":
 
                             updated_date_str = visited_date_edit.strftime("%B %d, %Y") if visited_date_edit else None
 
+                            cleaned_reviews = [n.strip() for n in st.session_state.get(reviews_key, r["reviews"]) if n and n.strip()]
+
                             restaurants[global_idx].update({
                                 "name": edit_name.strip(),
                                 "cuisine": edit_cuisine,
@@ -394,7 +400,7 @@ if action == "View All Places":
                                 "images": remaining_images + new_image_urls,
                                 "lat": new_lat,
                                 "lon": new_lon,
-                                "reviews": [n.strip() for n in st.session_state.get(reviews_key, r["reviews"]) if n.strip()]
+                                "reviews": cleaned_reviews
                             })
 
                             save_data(restaurants)
@@ -464,9 +470,7 @@ elif action == "Add a Place":
             lat = geo_location.latitude if geo_location else None
             lon = geo_location.longitude if geo_location else None
            
-            new_reviews = []
-            if quick_notes.strip():
-                new_reviews.append(quick_notes.strip())
+            new_reviews = [quick_notes.strip()] if quick_notes.strip() else []
            
             new = {
                 "name": name.strip(),
@@ -609,8 +613,9 @@ else:
                         if c["reviews"]:
                             st.markdown("### 📝 Notes")
                             for note in c["reviews"]:
-                                with st.container(border=True):
-                                    st.write(note)
+                                if note and str(note).strip():
+                                    with st.container(border=True):
+                                        st.write(str(note).strip())
                         else:
                             st.info("No notes yet!")
                         if c.get("images"):
