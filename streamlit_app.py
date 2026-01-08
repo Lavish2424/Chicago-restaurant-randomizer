@@ -481,7 +481,7 @@ elif action == "Map":
         position: fixed; 
         bottom: 50px; left: 50px; width: 180px; height: 140px; 
         background-color: white; border:2px solid grey; border-radius:6px; 
-        z-index:9999; font-size:5px; padding: 5px;
+        z-index:9999; font-size:10px; padding: 10px;
         ">
       <b>Legend</b><br>
       &nbsp;<i class="fa fa-map-marker fa-2x" style="color:blue"></i>&nbsp; Not visited yet<br>
