@@ -4,12 +4,20 @@ import urllib.parse
 from datetime import datetime, date
 from supabase import create_client, Client
 import os
+import folium
+from streamlit_folium import st_folium
+from geopy.geocoders import Nominatim
+from geopy.extra.rate_limiter import RateLimiter
 
 # ==================== SUPABASE SETUP ====================
 supabase_url = st.secrets["SUPABASE_URL"]
 supabase_key = st.secrets["SUPABASE_ANON_KEY"]
 supabase: Client = create_client(supabase_url, supabase_key)
 BUCKET_NAME = "restaurant-images"
+
+# Geocoder setup (free, no API key needed)
+geolocator = Nominatim(user_agent="chicago_restaurant_app")
+geocode = RateLimiter(geolocator.geocode, min_delay_seconds=1)
 
 def load_data():
     try:
@@ -21,6 +29,8 @@ def load_data():
             place.setdefault("visited_date", None)
             place.setdefault("reviews", [])
             place.setdefault("images", [])
+            place.setdefault("lat", None)
+            place.setdefault("lon", None)
         return data
     except Exception as e:
         st.error(f"Error loading data: {str(e)}")
@@ -41,7 +51,9 @@ def save_data(data):
                 "visited": place.get("visited", False),
                 "visited_date": place.get("visited_date"),
                 "reviews": place["reviews"],
-                "images": place.get("images", [])
+                "images": place.get("images", []),
+                "lat": place.get("lat"),
+                "lon": place.get("lon")
             }
             if place_id:
                 supabase.table("restaurants").update(update_data).eq("id", place_id).execute()
@@ -60,7 +72,7 @@ st.markdown("<h1 style='text-align: center;'>🍽️🍸 Chicago Restaurant/Bar 
 st.markdown("<p style='text-align: center;'>Add, view, and randomly pick Chicago eats & drinks!</p>", unsafe_allow_html=True)
 
 st.sidebar.header("Actions")
-action = st.sidebar.radio("What do you want to do?", ["View All Places", "Add a Place", "Random Pick"])
+action = st.sidebar.radio("What do you want to do?", ["View All Places", "Add a Place", "Random Pick", "Map"])
 
 # Track previous action to detect tab changes
 if "previous_action" not in st.session_state:
@@ -186,7 +198,6 @@ if action == "View All Places":
             with st.expander(f"{r['name']}{icon}{fav}{visited}{visited_date_str} • {r['cuisine']} • {r['price']} • {r['location']}{img_count}{notes_count}",
                              expanded=(f"edit_mode_{global_idx}" in st.session_state)):
                 if f"edit_mode_{global_idx}" not in st.session_state:
-                    # Normal view
                     btn1, btn2, btn3, btn4 = st.columns(4)
                     with btn1:
                         if st.button("❤️ Favorite" if not r.get("favorite") else "💔 Unfavorite", key=f"fav_{global_idx}", use_container_width=True):
@@ -234,7 +245,7 @@ if action == "View All Places":
                                     with col:
                                         st.image(r["images"][i + j], use_column_width=True)
                 else:
-                    # ==================== EDIT MODE ====================
+                    # Edit Mode
                     st.subheader(f"Editing: {r['name']}")
 
                     edit_name = st.text_input("Name", value=r["name"], key=f"edit_name_{global_idx}")
@@ -249,7 +260,6 @@ if action == "View All Places":
 
                     edit_visited = st.checkbox("✅ I've already visited this place", value=r.get("visited", False), key=f"edit_visited_{global_idx}")
 
-                    # Parse existing visited_date if present
                     existing_date = None
                     if r.get("visited_date"):
                         try:
@@ -286,19 +296,16 @@ if action == "View All Places":
                     col_save, col_cancel = st.columns(2)
                     with col_save:
                         if st.button("💾 Save Changes", type="primary", use_container_width=True, key=f"save_{global_idx}"):
-                            # Upload new images
                             new_image_urls = []
                             if new_images:
                                 with st.spinner("Uploading new images..."):
                                     new_image_urls = upload_images_to_supabase(new_images, edit_name)
 
-                            # Remove deleted images from storage and list
                             remaining_images = r["images"][:]
                             if images_to_delete_key in st.session_state:
                                 for url in st.session_state[images_to_delete_key]:
                                     if url in remaining_images:
                                         remaining_images.remove(url)
-                                    # Delete from Supabase storage
                                     try:
                                         parsed = urllib.parse.urlparse(url)
                                         path = parsed.path
@@ -309,7 +316,17 @@ if action == "View All Places":
                                     except:
                                         pass
 
-                            # Update record
+                            # Re-geocode if address changed
+                            if edit_address.strip() != r["address"]:
+                                full_address = f"{edit_address.strip()}, Chicago, IL"
+                                with st.spinner("Updating location on map..."):
+                                    location_geo = geocode(full_address)
+                                new_lat = location_geo.latitude if location_geo else None
+                                new_lon = location_geo.longitude if location_geo else None
+                            else:
+                                new_lat = r.get("lat")
+                                new_lon = r.get("lon")
+
                             updated_date_str = visited_date_edit.strftime("%B %d, %Y") if visited_date_edit else None
 
                             restaurants[global_idx].update({
@@ -321,13 +338,14 @@ if action == "View All Places":
                                 "type": edit_type,
                                 "visited": edit_visited,
                                 "visited_date": updated_date_str,
-                                "images": remaining_images + new_image_urls
+                                "images": remaining_images + new_image_urls,
+                                "lat": new_lat,
+                                "lon": new_lon
                             })
 
                             save_data(restaurants)
                             st.session_state.restaurants = load_data()
 
-                            # Clean up session state
                             del st.session_state[f"edit_mode_{global_idx}"]
                             if images_to_delete_key in st.session_state:
                                 del st.session_state[images_to_delete_key]
@@ -381,6 +399,12 @@ elif action == "Add a Place":
                     image_urls = upload_images_to_supabase(uploaded_images, name)
             
             visited_date_str = visited_date.strftime("%B %d, %Y") if visited_date else None
+
+            full_address = f"{address.strip()}, Chicago, IL"
+            with st.spinner("Finding location for map..."):
+                geo_location = geocode(full_address)
+            lat = geo_location.latitude if geo_location else None
+            lon = geo_location.longitude if geo_location else None
             
             new = {
                 "name": name.strip(),
@@ -393,7 +417,9 @@ elif action == "Add a Place":
                 "visited": visited,
                 "visited_date": visited_date_str,
                 "reviews": [],
-                "images": image_urls
+                "images": image_urls,
+                "lat": lat,
+                "lon": lon
             }
             
             if quick_notes.strip():
@@ -406,11 +432,45 @@ elif action == "Add a Place":
             try:
                 supabase.table("restaurants").insert(new).execute()
                 st.session_state.restaurants = load_data()
-                st.session_state["visited_date_key"] = None  # Reset for next entry
-                st.success(f"{name} added!")
+                st.session_state["visited_date_key"] = None
+                st.success(f"{name} added and pinned on the map!")
                 st.rerun()
             except Exception as e:
                 st.error(f"Failed to add place: {str(e)}")
+
+# ────────────────────────────── Map ──────────────────────────────
+elif action == "Map":
+    st.header("Interactive Map 🗺️")
+    
+    places_with_coords = [r for r in restaurants if r.get("lat") and r.get("lon")]
+    
+    if not places_with_coords:
+        st.info("No places with coordinates yet. Add places with valid Chicago addresses to see them on the map!")
+        st.stop()
+    
+    # Center map on Chicago
+    m = folium.Map(location=[41.8781, -87.6298], zoom_start=12, tiles="OpenStreetMap")
+    
+    for place in places_with_coords:
+        icon_color = "red" if place.get("visited") else "blue"
+        icon_symbol = "cutlery" if place["type"] == "restaurant" else "glass-martini"
+        
+        popup_html = f"""
+        <b>{place['name']}</b><br>
+        {place['cuisine']} • {place['price']} • {place['location']}<br>
+        {place['address']}<br>
+        {"Visited: " + place.get('visited_date', '') if place.get('visited') else "Not visited yet"}
+        """
+        popup = folium.Popup(popup_html, max_width=300)
+        
+        folium.Marker(
+            [place['lat'], place['lon']],
+            popup=popup,
+            tooltip=place['name'],
+            icon=folium.Icon(color=icon_color, icon=icon_symbol, prefix='fa')
+        ).add_to(m)
+    
+    st_folium(m, width=700, height=500)
 
 # ────────────────────────────── Random Pick ──────────────────────────────
 else:
