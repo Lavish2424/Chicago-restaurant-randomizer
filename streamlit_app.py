@@ -280,7 +280,7 @@ if action == "View All Places":
                         key=f"edit_visited_date_{global_idx}"
                     )
 
-                    # Safe handling: check for None or cleared state
+                    # Fixed: Safe handling for both None and manual clear
                     if edit_visited_date is None or edit_visited_date.year < 1000:
                         visited_date_edit = None
                     else:
