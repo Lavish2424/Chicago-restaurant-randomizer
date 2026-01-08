@@ -172,13 +172,8 @@ st.markdown("<h1 style='text-align: center;'>🍽️🍸 Chicago Restaurant/Bar 
 st.markdown("<p style='text-align: center;'>Add, view, and randomly pick Chicago eats & drinks!</p>", unsafe_allow_html=True)
 
 st.sidebar.header("Actions")
-
-# UPDATED: Added a 'key' to this widget so we can control it programmatically
-action = st.sidebar.radio(
-    "What do you want to do?", 
-    ["View All Places", "Map View", "Add a Place", "Random Pick"],
-    key="nav_selection" 
-)
+# Reverted back to standard radio button without the 'key'
+action = st.sidebar.radio("What do you want to do?", ["View All Places", "Map View", "Add a Place", "Random Pick"])
 
 # Clear session state on tab change
 if "previous_action" not in st.session_state:
@@ -474,7 +469,7 @@ elif action == "Map View":
             # Logic for Colors: Green (Visited) vs Gray (Not Visited)
             color = "green" if r.get("visited") else "gray"
             
-            # UPDATED: Using 'glyphicon' so the martini glass works reliably
+            # Using 'glyphicon' so the martini glass works reliably
             if r["type"] == "cocktail_bar":
                 icon_name = "glass"
                 icon_prefix = "glyphicon"
@@ -538,7 +533,6 @@ elif action == "Add a Place":
             if lat is None:
                 st.warning("⚠️ Could not find specific coordinates for this address. It will save, but won't appear on the map pin.")
             else:
-                # Use st.toast for feedback since we are about to redirect
                 st.toast("✅ Location found!")
 
             image_urls = []
@@ -568,12 +562,8 @@ elif action == "Add a Place":
             try:
                 supabase.table("restaurants").insert(new).execute()
                 st.session_state.restaurants = load_data()
-                
-                # UPDATED: Redirect Logic
-                st.success(f"{name} added successfully! Redirecting...")
-                st.session_state.nav_selection = "View All Places"
-                st.rerun()
-                
+                st.success(f"{name} added successfully!")
+                st.rerun() # Just refreshes the app
             except Exception as e:
                 st.error(f"Failed to add place: {str(e)}")
 
