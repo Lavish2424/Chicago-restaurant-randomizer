@@ -67,7 +67,6 @@ if "previous_action" not in st.session_state:
     st.session_state.previous_action = action
 
 if st.session_state.previous_action != action:
-    # Tab changed — clear transient states
     if "last_pick" in st.session_state:
         del st.session_state.last_pick
     keys_to_clear = [k for k in st.session_state.keys() if k.startswith("edit_mode_") or k.startswith("images_to_delete_") or k.startswith("del_confirm_")]
@@ -147,7 +146,6 @@ def upload_images_to_supabase(uploaded_files, restaurant_name):
 if action == "View All Places":
     st.header("All Places 👀")
     st.caption(f"{len(restaurants)} place(s)")
-
     if not restaurants:
         st.info("No places added yet.")
     else:
@@ -159,14 +157,12 @@ if action == "View All Places":
                 "Sort by",
                 ["A-Z (Name)", "Favorites First", "Recently Added", "Oldest First"]
             )
-
         filtered = restaurants.copy()
         if search_term:
             lower = search_term.lower()
             filtered = [r for r in filtered if lower in r["name"].lower() or
                         lower in r["cuisine"].lower() or lower in r["location"].lower() or
                         lower in r.get("address", "").lower()]
-
         if sort_option == "A-Z (Name)":
             sorted_places = sorted(filtered, key=lambda x: x["name"].lower())
         elif sort_option == "Favorites First":
@@ -187,10 +183,10 @@ if action == "View All Places":
             visited_date_str = f" (visited {r['visited_date']})" if r.get("visited") and r.get("visited_date") else ""
             img_count = f" • {len(r.get('images', []))} photo{'s' if len(r.get('images', [])) > 1 else ''}" if r.get("images") else ""
             notes_count = f" • {len(r['reviews'])} note{'s' if len(r['reviews']) != 1 else ''}" if r["reviews"] else ""
-
             with st.expander(f"{r['name']}{icon}{fav}{visited}{visited_date_str} • {r['cuisine']} • {r['price']} • {r['location']}{img_count}{notes_count}",
                              expanded=(f"edit_mode_{global_idx}" in st.session_state)):
                 if f"edit_mode_{global_idx}" not in st.session_state:
+                    # Normal view
                     btn1, btn2, btn3, btn4 = st.columns(4)
                     with btn1:
                         if st.button("❤️ Favorite" if not r.get("favorite") else "💔 Unfavorite", key=f"fav_{global_idx}", use_container_width=True):
@@ -215,6 +211,7 @@ if action == "View All Places":
                         if st.button("Cancel Delete", key=f"can_{global_idx}", use_container_width=True):
                             del st.session_state[delete_key]
                             st.rerun()
+
                     st.markdown("---")
                     st.write(f"**Address:** {r.get('address', 'Not provided')}")
                     st.markdown(f"[📍 Open in Google Maps]({google_maps_link(r.get('address', ''), r['name'])})")
@@ -237,14 +234,118 @@ if action == "View All Places":
                                     with col:
                                         st.image(r["images"][i + j], use_column_width=True)
                 else:
-                    # Edit form remains unchanged (omitted for brevity, same as before)
+                    # ==================== EDIT MODE ====================
                     st.subheader(f"Editing: {r['name']}")
-                    # ... (full edit form code from previous version)
+
+                    edit_name = st.text_input("Name", value=r["name"], key=f"edit_name_{global_idx}")
+                    edit_cuisine = st.selectbox("Cuisine/Style", CUISINES, index=CUISINES.index(r["cuisine"]), key=f"edit_cuisine_{global_idx}")
+                    edit_price = st.selectbox("Price", ["$", "$$", "$$$", "$$$$"], index=["$", "$$", "$$$", "$$$$"].index(r["price"]), key=f"edit_price_{global_idx}")
+                    edit_location = st.selectbox("Neighborhood", NEIGHBORHOODS, index=NEIGHBORHOODS.index(r["location"]), key=f"edit_location_{global_idx}")
+                    edit_address = st.text_input("Address", value=r["address"], key=f"edit_address_{global_idx}")
+                    edit_type = st.selectbox("Type", ["restaurant", "cocktail_bar"],
+                                             index=0 if r["type"] == "restaurant" else 1,
+                                             format_func=lambda x: "Restaurant 🍽️" if x=="restaurant" else "Cocktail Bar 🍸",
+                                             key=f"edit_type_{global_idx}")
+
+                    edit_visited = st.checkbox("✅ I've already visited this place", value=r.get("visited", False), key=f"edit_visited_{global_idx}")
+
+                    # Parse existing visited_date if present
+                    existing_date = None
+                    if r.get("visited_date"):
+                        try:
+                            existing_date = datetime.strptime(r["visited_date"], "%B %d, %Y").date()
+                        except:
+                            pass
+
+                    default_edit_date = existing_date or (date.today() if edit_visited else None)
+
+                    edit_visited_date = st.date_input(
+                        "Date Visited (optional)",
+                        value=default_edit_date,
+                        key=f"edit_visited_date_{global_idx}"
+                    )
+
+                    visited_date_edit = edit_visited_date if edit_visited_date is not None else None
+
+                    st.markdown("### Add more photos")
+                    new_images = st.file_uploader("Upload additional photos", type=["png", "jpg", "jpeg", "webp"], accept_multiple_files=True, key=f"edit_images_{global_idx}")
+
+                    if r.get("images"):
+                        st.markdown("### Current photos")
+                        images_to_delete_key = f"images_to_delete_{global_idx}"
+                        if images_to_delete_key not in st.session_state:
+                            st.session_state[images_to_delete_key] = set()
+
+                        cols = st.columns(3)
+                        for i, img_url in enumerate(r["images"]):
+                            with cols[i % 3]:
+                                st.image(img_url, use_column_width=True)
+                                if st.checkbox("Delete this photo", key=f"del_img_{global_idx}_{i}"):
+                                    st.session_state[images_to_delete_key].add(img_url)
+
+                    col_save, col_cancel = st.columns(2)
+                    with col_save:
+                        if st.button("💾 Save Changes", type="primary", use_container_width=True, key=f"save_{global_idx}"):
+                            # Upload new images
+                            new_image_urls = []
+                            if new_images:
+                                with st.spinner("Uploading new images..."):
+                                    new_image_urls = upload_images_to_supabase(new_images, edit_name)
+
+                            # Remove deleted images from storage and list
+                            remaining_images = r["images"][:]
+                            if images_to_delete_key in st.session_state:
+                                for url in st.session_state[images_to_delete_key]:
+                                    if url in remaining_images:
+                                        remaining_images.remove(url)
+                                    # Delete from Supabase storage
+                                    try:
+                                        parsed = urllib.parse.urlparse(url)
+                                        path = parsed.path
+                                        prefix = f"/storage/v1/object/public/{BUCKET_NAME}/"
+                                        if path.startswith(prefix):
+                                            file_path = path[len(prefix):]
+                                            supabase.storage.from_(BUCKET_NAME).remove([file_path])
+                                    except:
+                                        pass
+
+                            # Update record
+                            updated_date_str = visited_date_edit.strftime("%B %d, %Y") if visited_date_edit else None
+
+                            restaurants[global_idx].update({
+                                "name": edit_name.strip(),
+                                "cuisine": edit_cuisine,
+                                "price": edit_price,
+                                "location": edit_location,
+                                "address": edit_address.strip(),
+                                "type": edit_type,
+                                "visited": edit_visited,
+                                "visited_date": updated_date_str,
+                                "images": remaining_images + new_image_urls
+                            })
+
+                            save_data(restaurants)
+                            st.session_state.restaurants = load_data()
+
+                            # Clean up session state
+                            del st.session_state[f"edit_mode_{global_idx}"]
+                            if images_to_delete_key in st.session_state:
+                                del st.session_state[images_to_delete_key]
+
+                            st.success("Changes saved!")
+                            st.rerun()
+
+                    with col_cancel:
+                        if st.button("❌ Cancel", use_container_width=True, key=f"cancel_{global_idx}"):
+                            del st.session_state[f"edit_mode_{global_idx}"]
+                            if f"images_to_delete_{global_idx}" in st.session_state:
+                                del st.session_state[f"images_to_delete_{global_idx}"]
+                            st.rerun()
 
 # ────────────────────────────── Add a Place ──────────────────────────────
 elif action == "Add a Place":
     st.header("Add a New Place 📍")
-   
+  
     name = st.text_input("Name*")
     cuisine = st.selectbox("Cuisine/Style*", CUISINES)
     price = st.selectbox("Price*", ["$", "$$", "$$$", "$$$$"])
@@ -252,13 +353,22 @@ elif action == "Add a Place":
     address = st.text_input("Address*")
     place_type = st.selectbox("Type*", ["restaurant", "cocktail_bar"],
                               format_func=lambda x: "Restaurant 🍽️" if x=="restaurant" else "Cocktail Bar 🍸")
+    
     visited = st.checkbox("✅ I've already visited this place")
-    visited_date = None
-    if visited:
-        visited_date = st.date_input("Date Visited", value=date.today())
+    
+    default_date = date.today() if visited else None
+    
+    visited_date_input = st.date_input(
+        "Date Visited (optional)",
+        value=default_date,
+        key="visited_date_key"
+    )
+    
+    visited_date = visited_date_input if visited_date_input is not None else None
+    
     uploaded_images = st.file_uploader("Upload photos", type=["png", "jpg", "jpeg", "webp"], accept_multiple_files=True)
     quick_notes = st.text_area("Quick notes (optional)", height=100)
-
+    
     if st.button("Add Place", type="primary"):
         if not all([name.strip(), address.strip()]):
             st.error("Name and address required")
@@ -269,7 +379,9 @@ elif action == "Add a Place":
             if uploaded_images:
                 with st.spinner("Uploading images..."):
                     image_urls = upload_images_to_supabase(uploaded_images, name)
-            visited_date_str = visited_date.strftime("%B %d, %Y") if visited and visited_date else None
+            
+            visited_date_str = visited_date.strftime("%B %d, %Y") if visited_date else None
+            
             new = {
                 "name": name.strip(),
                 "cuisine": cuisine,
@@ -283,15 +395,18 @@ elif action == "Add a Place":
                 "reviews": [],
                 "images": image_urls
             }
+            
             if quick_notes.strip():
                 new["reviews"].append({
                     "comment": quick_notes.strip(),
                     "reviewer": "You",
                     "date": datetime.now().strftime("%B %d, %Y")
                 })
+            
             try:
                 supabase.table("restaurants").insert(new).execute()
                 st.session_state.restaurants = load_data()
+                st.session_state["visited_date_key"] = None  # Reset for next entry
                 st.success(f"{name} added!")
                 st.rerun()
             except Exception as e:
@@ -300,7 +415,6 @@ elif action == "Add a Place":
 # ────────────────────────────── Random Pick ──────────────────────────────
 else:
     st.header("Random Place Picker 🎲")
-
     if not restaurants:
         st.info("Add places first!")
     else:
@@ -323,7 +437,6 @@ else:
                 st.write("")
                 st.write("")
                 only_fav = st.checkbox("❤️ Favorites only")
-
         filtered = [r for r in restaurants
                     if (not only_fav or r.get("favorite"))
                     and (type_filter == "all" or r.get("type") == type_filter)
@@ -333,9 +446,7 @@ else:
                     and (visited_filter == "All" or
                          (visited_filter == "Visited Only" and r.get("visited")) or
                          (visited_filter == "Not Visited Yet" and not r.get("visited")))]
-
         st.caption(f"**{len(filtered)} places** match your filters")
-
         if not filtered:
             st.warning("No matches – try broader filters!")
         else:
@@ -343,7 +454,6 @@ else:
                 picked = random.choice(filtered)
                 st.session_state.last_pick = picked
                 st.rerun()
-
             if "last_pick" in st.session_state:
                 c = st.session_state.last_pick
                 if c in filtered:
