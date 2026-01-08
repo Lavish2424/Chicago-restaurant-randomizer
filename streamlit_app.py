@@ -280,8 +280,8 @@ if action == "View All Places":
                         key=f"edit_visited_date_{global_idx}"
                     )
 
-                    # Handle manual clearing (Streamlit uses ancient date when cleared)
-                    if edit_visited_date.year < 1000:
+                    # Safe handling: check for None or cleared state
+                    if edit_visited_date is None or edit_visited_date.year < 1000:
                         visited_date_edit = None
                     else:
                         visited_date_edit = edit_visited_date
@@ -391,8 +391,8 @@ elif action == "Add a Place":
         key="visited_date_key"
     )
     
-    # Handle clearing in Add mode as well
-    if visited_date_input.year < 1000:
+    # Safe handling for both initial None and manual clear
+    if visited_date_input is None or visited_date_input.year < 1000:
         visited_date = None
     else:
         visited_date = visited_date_input
