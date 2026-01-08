@@ -260,6 +260,7 @@ if action == "View All Places":
 
                     edit_visited = st.checkbox("✅ I've already visited this place", value=r.get("visited", False), key=f"edit_visited_{global_idx}")
 
+                    # Parse existing visited_date if present
                     existing_date = None
                     if r.get("visited_date"):
                         try:
@@ -267,7 +268,11 @@ if action == "View All Places":
                         except:
                             pass
 
-                    default_edit_date = existing_date or (date.today() if edit_visited else None)
+                    # Only default to today if visited is checked AND no existing date
+                    if edit_visited and existing_date is None:
+                        default_edit_date = date.today()
+                    else:
+                        default_edit_date = existing_date  # Will be None if no date saved
 
                     edit_visited_date = st.date_input(
                         "Date Visited (optional)",
@@ -448,7 +453,6 @@ elif action == "Map":
         st.info("No places with coordinates yet. Add places with valid Chicago addresses to see them on the map!")
         st.stop()
     
-    # Center map on Chicago
     m = folium.Map(location=[41.8781, -87.6298], zoom_start=12, tiles="OpenStreetMap")
     
     for place in places_with_coords:
