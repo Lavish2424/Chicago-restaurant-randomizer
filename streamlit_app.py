@@ -69,7 +69,6 @@ if "previous_action" not in st.session_state:
 if st.session_state.previous_action != action:
     if "last_pick" in st.session_state:
         del st.session_state.last_pick
-    # Clear any transient keys when switching tabs
     keys_to_clear = [k for k in st.session_state.keys() if k.startswith("edit_mode_") or k.startswith("images_to_delete_") or k.startswith("del_confirm_")]
     for k in keys_to_clear:
         del st.session_state[k]
@@ -250,16 +249,16 @@ elif action == "Add a Place":
     
     visited = st.checkbox("✅ I've already visited this place")
     
-    # Use a dedicated form key for the date input
-    default_for_widget = date.today() if visited else None
+    # Default value based on checkbox — this is safe because it's passed directly to the widget
+    default_date = date.today() if visited else None
     
     visited_date_input = st.date_input(
         "Date Visited (optional)",
-        value=default_for_widget,
+        value=default_date,
         key="visited_date_key"
     )
     
-    # The value from the widget (will be None if cleared, or a date)
+    # visited_date_input will be None if no date selected (or cleared), otherwise a date object
     visited_date = visited_date_input if visited_date_input is not None else None
     
     uploaded_images = st.file_uploader("Upload photos", type=["png", "jpg", "jpeg", "webp"], accept_multiple_files=True)
@@ -302,8 +301,8 @@ elif action == "Add a Place":
             try:
                 supabase.table("restaurants").insert(new).execute()
                 st.session_state.restaurants = load_data()
-                # Clear form inputs for next entry
-                st.session_state.visited_date_key = None
+                # Clear only the date picker (safe to do after success)
+                st.session_state["visited_date_key"] = None
                 st.success(f"{name} added!")
                 st.rerun()
             except Exception as e:
