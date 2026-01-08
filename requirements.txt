@@ -3,3 +3,4 @@ supabase
 folium
 streamlit-folium
 geopy
+streamlit-js-eval
