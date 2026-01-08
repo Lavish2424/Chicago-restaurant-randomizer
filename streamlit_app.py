@@ -478,7 +478,7 @@ elif action == "Map":
     legend_html = '''
     <div style="
         position: fixed; 
-        bottom: 10px; left: 10px; width: 120px; height: 140px; 
+        bottom: 10px; left: 10px; width: 110px; height: 140px; 
         background-color: white; border:2px solid grey; border-radius:6px; 
         z-index:9999; font-size:10px; padding: 5px;
         ">
