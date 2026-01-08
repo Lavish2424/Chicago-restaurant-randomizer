@@ -7,28 +7,47 @@ import os
 from streamlit_folium import st_folium
 import folium
 from geopy.geocoders import Nominatim
+from geopy.exc import GeocoderTimedOut, GeocoderServiceError
 
 # ==================== SUPABASE SETUP ====================
-supabase_url = st.secrets["SUPABASE_URL"]
-supabase_key = st.secrets["SUPABASE_ANON_KEY"]
+try:
+    supabase_url = st.secrets["SUPABASE_URL"]
+    supabase_key = st.secrets["SUPABASE_ANON_KEY"]
+except FileNotFoundError:
+    st.error("Secrets not found. Please set up your .streamlit/secrets.toml file.")
+    st.stop()
+
 supabase: Client = create_client(supabase_url, supabase_key)
 BUCKET_NAME = "restaurant-images"
 
-# Initialize Geocoder
-geolocator = Nominatim(user_agent="chicago_food_app_v2")
+# Initialize Geocoder with a unique User-Agent and higher timeout to prevent blocking
+geolocator = Nominatim(user_agent="chicago_food_app_alan_v3", timeout=10)
 
 # ==================== HELPER FUNCTIONS ====================
 
 def get_lat_lon(address):
-    """Converts an address string to latitude and longitude."""
+    """Converts an address string to latitude and longitude with robustness."""
     try:
-        # Append Chicago, IL to ensure accuracy
-        search_query = f"{address}, Chicago, IL" if "chicago" not in address.lower() else address
+        # Clean up address and ensure context
+        clean_addr = address.strip()
+        if not clean_addr:
+            return None, None
+            
+        # Append Chicago, IL if not present to help the geocoder
+        if "chicago" not in clean_addr.lower():
+            search_query = f"{clean_addr}, Chicago, IL"
+        else:
+            search_query = clean_addr
+            
         location = geolocator.geocode(search_query)
         if location:
             return location.latitude, location.longitude
         return None, None
-    except:
+    except (GeocoderTimedOut, GeocoderServiceError):
+        # Fail gracefully if the service times out
+        return None, None
+    except Exception as e:
+        print(f"Geocoding error: {e}")
         return None, None
 
 def load_data():
@@ -78,7 +97,6 @@ def save_data(data):
                 "visited_date": place.get("visited_date"),
                 "reviews": place["reviews"],
                 "images": place.get("images", []),
-                # Added lat/lon to save function
                 "latitude": place.get("latitude"),
                 "longitude": place.get("longitude")
             }
@@ -91,7 +109,6 @@ def save_data(data):
 
 def delete_restaurant(index):
     r = restaurants[index]
-    # Delete images from storage
     if r.get("images"):
         paths_to_delete = []
         for url in r["images"]:
@@ -109,7 +126,6 @@ def delete_restaurant(index):
                 supabase.storage.from_(BUCKET_NAME).remove(paths_to_delete)
             except:
                 pass
-    # Delete record from DB
     if "id" in r:
         supabase.table("restaurants").delete().eq("id", r["id"]).execute()
     del restaurants[index]
@@ -163,7 +179,6 @@ st.markdown("<h1 style='text-align: center;'>🍽️🍸 Chicago Restaurant/Bar 
 st.markdown("<p style='text-align: center;'>Add, view, and randomly pick Chicago eats & drinks!</p>", unsafe_allow_html=True)
 
 st.sidebar.header("Actions")
-# ADDED "Map View" to the options
 action = st.sidebar.radio("What do you want to do?", ["View All Places", "Map View", "Add a Place", "Random Pick"])
 
 # Clear session state on tab change
@@ -216,6 +231,7 @@ if action == "View All Places":
             sorted_places = sorted(filtered, key=lambda x: x.get("id", 0))
         else:
             sorted_places = filtered
+            
         for idx, r in enumerate(sorted_places):
             global_idx = restaurants.index(r)
             icon = " 🍸" if r.get("type") == "cocktail_bar" else " 🍽️"
@@ -224,6 +240,7 @@ if action == "View All Places":
             visited_date_str = f" (visited {r['visited_date']})" if r.get("visited") and r.get("visited_date") else ""
             img_count = f" • {len(r.get('images', []))} photo{'s' if len(r.get('images', [])) > 1 else ''}" if r.get("images") else ""
             notes_count = f" • {len(r['reviews'])} note{'s' if len(r['reviews']) != 1 else ''}" if r["reviews"] else ""
+            
             with st.expander(f"{r['name']}{icon}{fav}{visited}{visited_date_str} • {r['cuisine']} • {r['price']} • {r['location']}{img_count}{notes_count}",
                              expanded=(f"edit_mode_{global_idx}" in st.session_state)):
                 if f"edit_mode_{global_idx}" not in st.session_state:
@@ -255,6 +272,8 @@ if action == "View All Places":
                     col_addr, col_map = st.columns([3, 1])
                     with col_addr:
                         st.write(f"**📍 Address:** {r.get('address', 'Not provided')}")
+                        if not r.get("latitude"):
+                            st.caption("⚠️ No coordinates found for map.")
                     with col_map:
                         st.markdown(f"[🗺️ Open in Maps]({google_maps_link(r.get('address', ''), r['name'])})", unsafe_allow_html=True)
                     if r["reviews"]:
@@ -276,6 +295,7 @@ if action == "View All Places":
                                     with cols[j]:
                                         st.image(r["images"][idx], use_column_width=True)
                 else:
+                    # EDIT MODE
                     st.subheader(f"Editing: {r['name']}")
                     images_to_delete_key = f"images_to_delete_{global_idx}"
                     reviews_key = f"edit_reviews_{global_idx}"
@@ -375,11 +395,16 @@ if action == "View All Places":
                             updated_date_str = visited_date_edit.strftime("%B %d, %Y") if visited_date_edit else None
                             cleaned_reviews = [n.strip() for n in st.session_state.get(reviews_key, r["reviews"]) if n and n.strip()]
                             
-                            # UPDATED: Re-geocode if address changed
+                            # RE-GEOCODE ON EDIT
                             new_lat, new_lon = r.get("latitude"), r.get("longitude")
                             if edit_address.strip() != r["address"]:
-                                with st.spinner("Updating location on map..."):
-                                    new_lat, new_lon = get_lat_lon(edit_address.strip())
+                                with st.spinner("Location changed. Updating map coordinates..."):
+                                    fetched_lat, fetched_lon = get_lat_lon(edit_address.strip())
+                                    if fetched_lat:
+                                        new_lat, new_lon = fetched_lat, fetched_lon
+                                    else:
+                                        st.warning("Could not map new address. Coordinates cleared.")
+                                        new_lat, new_lon = None, None
 
                             restaurants[global_idx].update({
                                 "name": edit_name.strip(),
@@ -417,7 +442,6 @@ if action == "View All Places":
 elif action == "Map View":
     st.header("Chicago Food Map 🗺️")
 
-    # Filter controls
     col1, col2 = st.columns(2)
     with col1:
         map_type_filter = st.multiselect("Filter by Type", ["restaurant", "cocktail_bar"], default=["restaurant", "cocktail_bar"], 
@@ -425,31 +449,27 @@ elif action == "Map View":
     with col2:
         show_favs_only = st.checkbox("Show Favorites Only ❤️")
 
-    # Create Base Map (Centered on Chicago)
+    # Base Map centered on Chicago
     m = folium.Map(location=[41.8781, -87.6298], zoom_start=12, tiles="CartoDB positron")
 
     places_mapped = 0
+    places_skipped = 0
 
     for r in restaurants:
-        # Filter Logic
         if r["type"] not in map_type_filter:
             continue
         if show_favs_only and not r.get("favorite"):
             continue
 
-        # USE THE SAVED COORDINATES
         lat = r.get("latitude")
         lon = r.get("longitude")
 
-        # Only plot if we have valid numbers
         if lat is not None and lon is not None:
             places_mapped += 1
             
-            # Styling
             color = "red" if r.get("favorite") else "blue"
             icon_type = "glass" if r["type"] == "cocktail_bar" else "cutlery"
             
-            # Popup Content
             html = f"""
             <div style="font-family: sans-serif; width: 200px;">
                 <h4>{r['name']}</h4>
@@ -465,8 +485,10 @@ elif action == "Map View":
                 tooltip=r["name"],
                 icon=folium.Icon(color=color, icon=icon_type, prefix='fa')
             ).add_to(m)
+        else:
+            places_skipped += 1
 
-    st.caption(f"Showing {places_mapped} location(s)")
+    st.caption(f"Showing {places_mapped} location(s). ({places_skipped} skipped due to missing coordinates)")
     st_folium(m, width="100%", height=500)
 
 # ────────────────────────────── Add a Place ──────────────────────────────
@@ -481,16 +503,8 @@ elif action == "Add a Place":
                               format_func=lambda x: "Restaurant 🍽️" if x=="restaurant" else "Cocktail Bar 🍸")
    
     visited = st.checkbox("✅ I've already visited this place")
-   
     default_date = date.today() if visited else None
-   
-    visited_date_input = st.date_input(
-        "Date Visited (optional)",
-        value=default_date,
-        key="visited_date_key"
-    )
-   
-    visited_date = visited_date_input if visited_date_input is not None else None
+    visited_date = st.date_input("Date Visited", value=default_date) if visited else None
    
     uploaded_images = st.file_uploader("Upload photos", type=["png", "jpg", "jpeg", "webp"], accept_multiple_files=True)
     quick_notes = st.text_area("Quick notes (optional)", height=100)
@@ -501,15 +515,15 @@ elif action == "Add a Place":
         elif any(r["name"].lower() == name.lower().strip() for r in restaurants):
             st.warning("Already exists!")
         else:
-            # -----------------------------------------------
-            # UPDATED: Geocode immediately on ADD
-            # -----------------------------------------------
+            # === GEOCODING STEP ===
             lat, lon = None, None
-            with st.spinner("Locating address..."):
+            with st.spinner(f"Locating '{address}'..."):
                 lat, lon = get_lat_lon(address.strip())
             
             if lat is None:
-                st.warning("⚠️ Could not find exact location on map, but saving anyway.")
+                st.warning("⚠️ Could not find specific coordinates for this address. It will save, but won't appear on the map pin.")
+            else:
+                st.success("✅ Location found and pinned!")
 
             image_urls = []
             if uploaded_images:
@@ -531,14 +545,14 @@ elif action == "Add a Place":
                 "visited_date": visited_date_str,
                 "reviews": new_reviews,
                 "images": image_urls,
-                "latitude": lat,  # Saved to DB
-                "longitude": lon  # Saved to DB
+                "latitude": lat,
+                "longitude": lon
             }
           
             try:
                 supabase.table("restaurants").insert(new).execute()
                 st.session_state.restaurants = load_data()
-                st.success(f"{name} added!")
+                st.success(f"{name} added successfully!")
                 st.rerun()
             except Exception as e:
                 st.error(f"Failed to add place: {str(e)}")
@@ -568,6 +582,7 @@ else:
                 st.write("")
                 st.write("")
                 only_fav = st.checkbox("❤️ Favorites only")
+        
         filtered = [r for r in restaurants
                     if (not only_fav or r.get("favorite"))
                     and (type_filter == "all" or r.get("type") == type_filter)
@@ -577,6 +592,7 @@ else:
                     and (visited_filter == "All" or
                          (visited_filter == "Visited Only" and r.get("visited")) or
                          (visited_filter == "Not Visited Yet" and not r.get("visited")))]
+        
         st.caption(f"**{len(filtered)} places** match your filters")
         if not filtered:
             st.warning("No matches – try broader filters!")
