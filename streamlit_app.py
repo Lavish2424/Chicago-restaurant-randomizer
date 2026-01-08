@@ -6,8 +6,8 @@ from supabase import create_client, Client
 import os
 from streamlit_folium import st_folium
 import folium
-from geopy.geocoders import Nominatim
-from geopy.exc import GeocoderTimedOut, GeocoderServiceError
+# UPDATED: Using ArcGIS instead of Nominatim for better US address accuracy
+from geopy.geocoders import ArcGIS
 
 # ==================== SUPABASE SETUP ====================
 try:
@@ -20,32 +20,33 @@ except FileNotFoundError:
 supabase: Client = create_client(supabase_url, supabase_key)
 BUCKET_NAME = "restaurant-images"
 
-# Initialize Geocoder with a unique User-Agent and higher timeout to prevent blocking
-geolocator = Nominatim(user_agent="chicago_food_app_alan_v3", timeout=10)
+# UPDATED: Initialize ArcGIS Geocoder (No API key needed, very reliable)
+geolocator = ArcGIS(timeout=10)
 
 # ==================== HELPER FUNCTIONS ====================
 
 def get_lat_lon(address):
-    """Converts an address string to latitude and longitude with robustness."""
+    """Converts an address string to latitude and longitude using ArcGIS."""
     try:
-        # Clean up address and ensure context
         clean_addr = address.strip()
         if not clean_addr:
             return None, None
             
-        # Append Chicago, IL if not present to help the geocoder
-        if "chicago" not in clean_addr.lower():
+        # Smart check: Only add Chicago context if it's missing entirely
+        # This prevents "Chicago, IL, Chicago, IL" errors
+        if "chicago" not in clean_addr.lower() and "il" not in clean_addr.lower():
             search_query = f"{clean_addr}, Chicago, IL"
         else:
             search_query = clean_addr
             
         location = geolocator.geocode(search_query)
+        
         if location:
             return location.latitude, location.longitude
-        return None, None
-    except (GeocoderTimedOut, GeocoderServiceError):
-        # Fail gracefully if the service times out
-        return None, None
+        else:
+            print(f"Could not find: {search_query}")
+            return None, None
+            
     except Exception as e:
         print(f"Geocoding error: {e}")
         return None, None
@@ -515,7 +516,7 @@ elif action == "Add a Place":
         elif any(r["name"].lower() == name.lower().strip() for r in restaurants):
             st.warning("Already exists!")
         else:
-            # === GEOCODING STEP ===
+            # === GEOCODING STEP (Using ArcGIS) ===
             lat, lon = None, None
             with st.spinner(f"Locating '{address}'..."):
                 lat, lon = get_lat_lon(address.strip())
