@@ -268,17 +268,17 @@ if action == "View All Places":
                         except:
                             pass
 
-                    # Default to today only if visited and no existing date; otherwise use existing or None
+                    # Only default to today if visited is checked AND no existing date
                     if edit_visited and existing_date is None:
                         default_edit_date = date.today()
                     else:
                         default_edit_date = existing_date  # None if no date
 
-                    # FORCE allow clearing by always allowing value=None (the clear "x" appears when a date is selected)
+                    # To make the clear "x" button appear whenever a date is selected
+                    # we set value to the default, but Streamlit automatically makes it clearable
                     edit_visited_date = st.date_input(
                         "Date Visited (optional)",
                         value=default_edit_date,
-                        value=None,  # This is the key: allows clearing even when default is set
                         key=f"edit_visited_date_{global_idx}"
                     )
 
@@ -390,7 +390,6 @@ elif action == "Add a Place":
     visited_date_input = st.date_input(
         "Date Visited (optional)",
         value=default_date,
-        value=None,  # Allows the clear "x" button
         key="visited_date_key"
     )
     
