@@ -15,7 +15,7 @@ supabase_key = st.secrets["SUPABASE_ANON_KEY"]
 supabase: Client = create_client(supabase_url, supabase_key)
 BUCKET_NAME = "restaurant-images"
 
-# Geocoder setup (free, no API key needed)
+# Geocoder setup
 geolocator = Nominatim(user_agent="chicago_restaurant_app")
 geocode = RateLimiter(geolocator.geocode, min_delay_seconds=1)
 
@@ -27,10 +27,20 @@ def load_data():
             place.setdefault("favorite", False)
             place.setdefault("visited", False)
             place.setdefault("visited_date", None)
-            place.setdefault("reviews", [])
+            place.setdefault("reviews", [])  # Now just list of strings or dicts with only "comment"
             place.setdefault("images", [])
             place.setdefault("lat", None)
             place.setdefault("lon", None)
+            # Normalize old reviews to just comments
+            normalized = []
+            for rev in place["reviews"]:
+                if isinstance(rev, str):
+                    normalized.append(rev)
+                elif isinstance(rev, dict) and "comment" in rev:
+                    normalized.append(rev["comment"])
+                elif isinstance(rev, dict):
+                    normalized.append("")
+            place["reviews"] = normalized
         return data
     except Exception as e:
         st.error(f"Error loading data: {str(e)}")
@@ -50,7 +60,7 @@ def save_data(data):
                 "favorite": place.get("favorite", False),
                 "visited": place.get("visited", False),
                 "visited_date": place.get("visited_date"),
-                "reviews": place["reviews"],
+                "reviews": place["reviews"],  # Now list of strings
                 "images": place.get("images", []),
                 "lat": place.get("lat"),
                 "lon": place.get("lon")
@@ -73,7 +83,7 @@ st.markdown("<p style='text-align: center;'>Add, view, and randomly pick Chicago
 st.sidebar.header("Actions")
 action = st.sidebar.radio("What do you want to do?", ["View All Places", "Add a Place", "Random Pick", "Map"])
 
-# Track previous action to detect tab changes
+# Clear session state on tab change
 if "previous_action" not in st.session_state:
     st.session_state.previous_action = action
 if st.session_state.previous_action != action:
@@ -224,24 +234,24 @@ if action == "View All Places":
 
                     st.markdown("---")
 
-                    # Compact two-column address + map link
+                    # Address + Map link
                     col_addr, col_map = st.columns([3, 1])
                     with col_addr:
                         st.write(f"**📍 Address:** {r.get('address', 'Not provided')}")
                     with col_map:
                         st.markdown(f"[🗺️ Open in Maps]({google_maps_link(r.get('address', ''), r['name'])})", unsafe_allow_html=True)
 
-                    # Compact notes in bordered cards
+                    # Notes (just the text)
                     if r["reviews"]:
                         st.markdown("**📝 Notes**")
-                        for rev in reversed(r["reviews"]):
-                            with st.container(border=True):
-                                st.caption(f"{rev['reviewer']} — {rev['date']}")
-                                st.write(rev['comment'])
+                        for note in reversed(r["reviews"]):
+                            if note.strip():
+                                with st.container(border=True):
+                                    st.write(note)
                     else:
                         st.caption("_No notes yet — be the first to add one!_")
 
-                    # Photos (only if present)
+                    # Photos
                     if r.get("images"):
                         st.markdown("**📸 Photos**")
                         num_images = len(r["images"])
@@ -268,7 +278,6 @@ if action == "View All Places":
                                              key=f"edit_type_{global_idx}")
                     edit_visited = st.checkbox("✅ I've already visited this place", value=r.get("visited", False), key=f"edit_visited_{global_idx}")
 
-                    # Visited date handling
                     existing_date = None
                     if r.get("visited_date"):
                         try:
@@ -299,47 +308,39 @@ if action == "View All Places":
                                 if st.checkbox("Delete this photo", key=f"del_img_{global_idx}_{i}"):
                                     st.session_state[images_to_delete_key].add(img_url)
 
-                    # ==================== NOTES / REVIEWS EDITING ====================
-                    st.markdown("### Notes / Reviews")
+                    # ==================== NOTES EDITING (no author/date) ====================
+                    st.markdown("### Notes")
                     reviews_key = f"edit_reviews_{global_idx}"
                     if reviews_key not in st.session_state:
-                        st.session_state[reviews_key] = r["reviews"][:]  # copy
+                        st.session_state[reviews_key] = r["reviews"][:]  # list of strings
 
                     current_reviews = st.session_state[reviews_key]
 
-                    for rev_idx, rev in enumerate(current_reviews):
-                        col1, col2, col3 = st.columns([6, 1, 1])
+                    for rev_idx, note in enumerate(current_reviews):
+                        col1, col2 = st.columns([8, 1])
                         with col1:
-                            new_comment = st.text_area(
-                                f"Note from {rev['date']}",
-                                value=rev["comment"],
+                            new_note = st.text_area(
+                                "Note",
+                                value=note,
                                 key=f"rev_comment_{global_idx}_{rev_idx}",
                                 label_visibility="collapsed",
                                 height=100
                             )
                         with col2:
-                            st.write("")  # spacer
+                            st.write("")
                             st.write("")
                             if st.button("🗑️", key=f"del_rev_{global_idx}_{rev_idx}"):
                                 st.session_state[reviews_key].pop(rev_idx)
                                 st.rerun()
-                        with col3:
-                            st.write("")
-                            st.write("")
-                            st.write(f"_{rev['reviewer']}_  \n{rev['date']}")
 
-                        if new_comment != rev["comment"]:
-                            st.session_state[reviews_key][rev_idx]["comment"] = new_comment
+                        if new_note != note:
+                            st.session_state[reviews_key][rev_idx] = new_note
 
                     st.markdown("**Add a new note**")
-                    new_note = st.text_area("New note (optional)", height=100, key=f"new_note_{global_idx}")
-                    if new_note.strip():
+                    new_note_text = st.text_area("New note (optional)", height=100, key=f"new_note_{global_idx}")
+                    if new_note_text.strip():
                         if st.button("➕ Add Note", key=f"add_note_btn_{global_idx}"):
-                            st.session_state[reviews_key].append({
-                                "comment": new_note.strip(),
-                                "reviewer": "You",
-                                "date": datetime.now().strftime("%B %d, %Y")
-                            })
+                            st.session_state[reviews_key].append(new_note_text.strip())
                             st.rerun()
 
                     if not current_reviews:
@@ -369,7 +370,6 @@ if action == "View All Places":
                                     except:
                                         pass
 
-                            # Re-geocode if address changed
                             if edit_address.strip() != r["address"]:
                                 full_address = f"{edit_address.strip()}, Chicago, IL"
                                 with st.spinner("Updating location on map..."):
@@ -394,7 +394,7 @@ if action == "View All Places":
                                 "images": remaining_images + new_image_urls,
                                 "lat": new_lat,
                                 "lon": new_lon,
-                                "reviews": st.session_state.get(reviews_key, r["reviews"])
+                                "reviews": [n.strip() for n in st.session_state.get(reviews_key, r["reviews"]) if n.strip()]
                             })
 
                             save_data(restaurants)
@@ -418,9 +418,6 @@ if action == "View All Places":
                             if reviews_key in st.session_state:
                                 del st.session_state[reviews_key]
                             st.rerun()
-
-# The rest of the code (Add a Place, Map, Random Pick) remains unchanged
-# (Included below for completeness)
 
 # ────────────────────────────── Add a Place ──────────────────────────────
 elif action == "Add a Place":
@@ -467,6 +464,10 @@ elif action == "Add a Place":
             lat = geo_location.latitude if geo_location else None
             lon = geo_location.longitude if geo_location else None
            
+            new_reviews = []
+            if quick_notes.strip():
+                new_reviews.append(quick_notes.strip())
+           
             new = {
                 "name": name.strip(),
                 "cuisine": cuisine,
@@ -477,18 +478,11 @@ elif action == "Add a Place":
                 "favorite": False,
                 "visited": visited,
                 "visited_date": visited_date_str,
-                "reviews": [],
+                "reviews": new_reviews,
                 "images": image_urls,
                 "lat": lat,
                 "lon": lon
             }
-           
-            if quick_notes.strip():
-                new["reviews"].append({
-                    "comment": quick_notes.strip(),
-                    "reviewer": "You",
-                    "date": datetime.now().strftime("%B %d, %Y")
-                })
            
             try:
                 supabase.table("restaurants").insert(new).execute()
@@ -614,10 +608,9 @@ else:
                         st.markdown(f"[Open in Google Maps ↗️]({google_maps_link(c.get('address',''), c['name'])})")
                         if c["reviews"]:
                             st.markdown("### 📝 Notes")
-                            for rev in c["reviews"]:
-                                with st.chat_message("user"):
-                                    st.write(f"**{rev['date']}**")
-                                    st.write(rev['comment'])
+                            for note in c["reviews"]:
+                                with st.container(border=True):
+                                    st.write(note)
                         else:
                             st.info("No notes yet!")
                         if c.get("images"):
