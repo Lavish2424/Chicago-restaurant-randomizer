@@ -9,7 +9,6 @@ import folium
 from geopy.geocoders import ArcGIS
 import time
 from folium.plugins import LocateControl, MarkerCluster
-from collections import Counter
 
 # ==================== SUPABASE SETUP ====================
 try:
@@ -438,37 +437,24 @@ if action == "View All Places":
 elif action == "Map View":
     st.header("Chicago Food Map 🗺️")
 
-    # === NEW STATS DASHBOARD ON MAP TAB ===
+    # === NEW STATS DASHBOARD (METRICS ONLY) ===
     if restaurants:
-        with st.expander("📊 Map Insights & Stats (Click to View)", expanded=False):
-            total_count = len(restaurants)
-            visited_count = len([r for r in restaurants if r.get("visited")])
-            if total_count > 0:
-                completion_rate = int((visited_count / total_count) * 100)
-            else:
-                completion_rate = 0
-            
-            # Metrics
-            m1, m2, m3 = st.columns(3)
-            m1.metric("Total Places", total_count)
-            m2.metric("Visited", visited_count)
-            m3.metric("Completion", f"{completion_rate}%")
-            st.markdown("---")
-            
-            # Charts
-            c1, c2 = st.columns(2)
-            with c1:
-                st.markdown("**Top Cuisines**")
-                cuisine_counts = Counter([r["cuisine"] for r in restaurants])
-                st.bar_chart(cuisine_counts)
-            with c2:
-                st.markdown("**Price Distribution**")
-                price_counts = Counter([r["price"] for r in restaurants])
-                ordered_price = {k: price_counts.get(k, 0) for k in ["$", "$$", "$$$", "$$$$"] if price_counts.get(k, 0) > 0}
-                st.bar_chart(ordered_price)
+        total_count = len(restaurants)
+        visited_count = len([r for r in restaurants if r.get("visited")])
+        if total_count > 0:
+            completion_rate = int((visited_count / total_count) * 100)
+        else:
+            completion_rate = 0
+        
+        # Display 3 Big Metrics
+        m1, m2, m3 = st.columns(3)
+        m1.metric("Total Places", total_count)
+        m2.metric("Visited", visited_count)
+        m3.metric("Completion", f"{completion_rate}%")
+        st.markdown("---")
     # ==========================================
 
-    # 1. Base Map
+    # 1. Base Map (Using "OpenStreetMap" for full color)
     m = folium.Map(location=[41.8781, -87.6298], zoom_start=12, tiles="OpenStreetMap")
 
     # 2. Add Native "Locate Me" Button (Stable)
