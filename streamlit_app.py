@@ -69,7 +69,8 @@ if "previous_action" not in st.session_state:
 if st.session_state.previous_action != action:
     if "last_pick" in st.session_state:
         del st.session_state.last_pick
-    keys_to_clear = [k for k in st.session_state.keys() if k.startswith("edit_mode_") or k.startswith("images_to_delete_") or k.startswith("del_confirm_") or k == "visited_date_key"]
+    # Clear any transient keys when switching tabs
+    keys_to_clear = [k for k in st.session_state.keys() if k.startswith("edit_mode_") or k.startswith("images_to_delete_") or k.startswith("del_confirm_")]
     for k in keys_to_clear:
         del st.session_state[k]
     st.session_state.previous_action = action
@@ -249,20 +250,17 @@ elif action == "Add a Place":
     
     visited = st.checkbox("✅ I've already visited this place")
     
-    # Date input — always visible, starts empty
+    # Use a dedicated form key for the date input
+    default_for_widget = date.today() if visited else None
+    
     visited_date_input = st.date_input(
         "Date Visited (optional)",
-        value=None,
+        value=default_for_widget,
         key="visited_date_key"
     )
     
-    # Auto-select today when "visited" is checked and field is still empty
-    if visited and st.session_state.visited_date_key is None:
-        st.session_state.visited_date_key = date.today()
-        st.rerun()
-    
-    # Get the actual selected date (None if nothing chosen)
-    visited_date = st.session_state.visited_date_key if st.session_state.visited_date_key is not None else None
+    # The value from the widget (will be None if cleared, or a date)
+    visited_date = visited_date_input if visited_date_input is not None else None
     
     uploaded_images = st.file_uploader("Upload photos", type=["png", "jpg", "jpeg", "webp"], accept_multiple_files=True)
     quick_notes = st.text_area("Quick notes (optional)", height=100)
@@ -304,9 +302,8 @@ elif action == "Add a Place":
             try:
                 supabase.table("restaurants").insert(new).execute()
                 st.session_state.restaurants = load_data()
-                # Clear the date input for next addition
-                if "visited_date_key" in st.session_state:
-                    del st.session_state.visited_date_key
+                # Clear form inputs for next entry
+                st.session_state.visited_date_key = None
                 st.success(f"{name} added!")
                 st.rerun()
             except Exception as e:
