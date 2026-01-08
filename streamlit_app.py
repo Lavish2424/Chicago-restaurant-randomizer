@@ -9,6 +9,7 @@ import folium
 from geopy.geocoders import ArcGIS
 import time
 from folium.plugins import LocateControl, MarkerCluster
+from collections import Counter
 
 # ==================== SUPABASE SETUP ====================
 try:
@@ -437,7 +438,37 @@ if action == "View All Places":
 elif action == "Map View":
     st.header("Chicago Food Map 🗺️")
 
-    # 1. Base Map (Using "OpenStreetMap" for full color)
+    # === NEW STATS DASHBOARD ON MAP TAB ===
+    if restaurants:
+        with st.expander("📊 Map Insights & Stats (Click to View)", expanded=False):
+            total_count = len(restaurants)
+            visited_count = len([r for r in restaurants if r.get("visited")])
+            if total_count > 0:
+                completion_rate = int((visited_count / total_count) * 100)
+            else:
+                completion_rate = 0
+            
+            # Metrics
+            m1, m2, m3 = st.columns(3)
+            m1.metric("Total Places", total_count)
+            m2.metric("Visited", visited_count)
+            m3.metric("Completion", f"{completion_rate}%")
+            st.markdown("---")
+            
+            # Charts
+            c1, c2 = st.columns(2)
+            with c1:
+                st.markdown("**Top Cuisines**")
+                cuisine_counts = Counter([r["cuisine"] for r in restaurants])
+                st.bar_chart(cuisine_counts)
+            with c2:
+                st.markdown("**Price Distribution**")
+                price_counts = Counter([r["price"] for r in restaurants])
+                ordered_price = {k: price_counts.get(k, 0) for k in ["$", "$$", "$$$", "$$$$"] if price_counts.get(k, 0) > 0}
+                st.bar_chart(ordered_price)
+    # ==========================================
+
+    # 1. Base Map
     m = folium.Map(location=[41.8781, -87.6298], zoom_start=12, tiles="OpenStreetMap")
 
     # 2. Add Native "Locate Me" Button (Stable)
@@ -452,11 +483,12 @@ elif action == "Map View":
     # 4. Add Floating Legend (HTML) with FontAwesome icons
     legend_html = '''
     <div style="position: fixed; 
-     bottom: 20px; right: 20px; width: 140px; height: 130px; 
+     bottom: 20px; right: 20px; width: 140px; height: 160px; 
      border:2px solid grey; z-index:9999; font-size:14px;
      background-color:white; opacity: 0.9;
      padding: 10px; border-radius: 5px;">
      <b>Legend</b><br>
+     <i class="fa fa-map-marker" style="color:blue; font-size:16px;"></i>  You<br>
      <i class="fa fa-map-marker" style="color:green; font-size:16px;"></i>  Visited<br>
      <i class="fa fa-map-marker" style="color:gray; font-size:16px;"></i>  Not Visited<br>
      <br>
@@ -624,9 +656,8 @@ else:
             st.warning("No matches – try broader filters!")
         else:
             if st.button("🎲 Pick Random Place!", type="primary", use_container_width=True):
-                # ANIMATION LOOP (UPDATED: Faster and Longer)
+                # ANIMATION LOOP (Faster and Longer)
                 placeholder = st.empty()
-                # 50 iterations at 0.05s = 2.5 seconds total
                 for _ in range(50):
                     temp_pick = random.choice(filtered)
                     placeholder.markdown(f"## 🎲 {temp_pick['name']}")
