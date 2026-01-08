@@ -67,10 +67,9 @@ if "previous_action" not in st.session_state:
     st.session_state.previous_action = action
 
 if st.session_state.previous_action != action:
-    # Tab changed — clear transient states
     if "last_pick" in st.session_state:
         del st.session_state.last_pick
-    keys_to_clear = [k for k in st.session_state.keys() if k.startswith("edit_mode_") or k.startswith("images_to_delete_") or k.startswith("del_confirm_")]
+    keys_to_clear = [k for k in st.session_state.keys() if k.startswith("edit_mode_") or k.startswith("images_to_delete_") or k.startswith("del_confirm_") or k == "visited_date_key"]
     for k in keys_to_clear:
         del st.session_state[k]
     st.session_state.previous_action = action
@@ -233,9 +232,8 @@ if action == "View All Places":
                                     with col:
                                         st.image(r["images"][i + j], use_column_width=True)
                 else:
-                    # Edit mode (you can keep your existing edit form here if you have one)
                     st.subheader(f"Editing: {r['name']}")
-                    st.info("Edit form not included in this version — add your own if needed.")
+                    st.info("Edit form not implemented yet — you can add it here if needed.")
 
 # ────────────────────────────── Add a Place ──────────────────────────────
 elif action == "Add a Place":
@@ -251,20 +249,20 @@ elif action == "Add a Place":
     
     visited = st.checkbox("✅ I've already visited this place")
     
-    # Always show the date input
-    if visited:
-        default_date = date.today()
-    else:
-        default_date = None  # No default if not visited
-    
+    # Date input — always visible, starts empty
     visited_date_input = st.date_input(
         "Date Visited (optional)",
-        value=default_date,
-        format="MMMM D, YYYY"
+        value=None,
+        key="visited_date_key"
     )
     
-    # Handle the case where no date is selected (date_input returns date.min if cleared)
-    visited_date = visited_date_input if visited_date_input != date.min else None
+    # Auto-select today when "visited" is checked and field is still empty
+    if visited and st.session_state.visited_date_key is None:
+        st.session_state.visited_date_key = date.today()
+        st.rerun()
+    
+    # Get the actual selected date (None if nothing chosen)
+    visited_date = st.session_state.visited_date_key if st.session_state.visited_date_key is not None else None
     
     uploaded_images = st.file_uploader("Upload photos", type=["png", "jpg", "jpeg", "webp"], accept_multiple_files=True)
     quick_notes = st.text_area("Quick notes (optional)", height=100)
@@ -280,7 +278,6 @@ elif action == "Add a Place":
                 with st.spinner("Uploading images..."):
                     image_urls = upload_images_to_supabase(uploaded_images, name)
             
-            # Format visited_date as readable string or None
             visited_date_str = visited_date.strftime("%B %d, %Y") if visited_date else None
             
             new = {
@@ -307,6 +304,9 @@ elif action == "Add a Place":
             try:
                 supabase.table("restaurants").insert(new).execute()
                 st.session_state.restaurants = load_data()
+                # Clear the date input for next addition
+                if "visited_date_key" in st.session_state:
+                    del st.session_state.visited_date_key
                 st.success(f"{name} added!")
                 st.rerun()
             except Exception as e:
