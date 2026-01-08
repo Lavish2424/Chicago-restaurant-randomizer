@@ -272,21 +272,15 @@ if action == "View All Places":
                     if edit_visited and existing_date is None:
                         default_edit_date = date.today()
                     else:
-                        default_edit_date = existing_date  # None if no date
+                        default_edit_date = existing_date  # Will be None if no date saved
 
-                    # To make the clear "x" button appear whenever a date is selected
-                    # we set value to the default, but Streamlit automatically makes it clearable
                     edit_visited_date = st.date_input(
                         "Date Visited (optional)",
                         value=default_edit_date,
                         key=f"edit_visited_date_{global_idx}"
                     )
 
-                    # Safe handling: treat ancient year or None as cleared
-                    if edit_visited_date is None or (hasattr(edit_visited_date, 'year') and edit_visited_date.year < 1000):
-                        visited_date_edit = None
-                    else:
-                        visited_date_edit = edit_visited_date
+                    visited_date_edit = edit_visited_date if edit_visited_date is not None else None
 
                     st.markdown("### Add more photos")
                     new_images = st.file_uploader("Upload additional photos", type=["png", "jpg", "jpeg", "webp"], accept_multiple_files=True, key=f"edit_images_{global_idx}")
@@ -393,10 +387,7 @@ elif action == "Add a Place":
         key="visited_date_key"
     )
     
-    if visited_date_input is None or (hasattr(visited_date_input, 'year') and visited_date_input.year < 1000):
-        visited_date = None
-    else:
-        visited_date = visited_date_input
+    visited_date = visited_date_input if visited_date_input is not None else None
     
     uploaded_images = st.file_uploader("Upload photos", type=["png", "jpg", "jpeg", "webp"], accept_multiple_files=True)
     quick_notes = st.text_area("Quick notes (optional)", height=100)
