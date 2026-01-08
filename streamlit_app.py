@@ -15,8 +15,11 @@ supabase_key = st.secrets["SUPABASE_ANON_KEY"]
 supabase: Client = create_client(supabase_url, supabase_key)
 BUCKET_NAME = "restaurant-images"
 
-# Geocoder setup
-geolocator = Nominatim(user_agent="chicago_restaurant_app")
+# Geocoder setup - unique app identifier (no email needed)
+geolocator = Nominatim(
+    user_agent="AlanChicagoRestaurantRandomizer_v1.0",
+    timeout=10
+)
 geocode = RateLimiter(geolocator.geocode, min_delay_seconds=1)
 
 def load_data():
@@ -31,7 +34,6 @@ def load_data():
             place.setdefault("images", [])
             place.setdefault("lat", None)
             place.setdefault("lon", None)
-
             # Safely normalize reviews to list of non-empty strings
             normalized = []
             for rev in place.get("reviews", []):
@@ -198,7 +200,6 @@ if action == "View All Places":
             sorted_places = sorted(filtered, key=lambda x: x.get("id", 0))
         else:
             sorted_places = filtered
-
         for idx, r in enumerate(sorted_places):
             global_idx = restaurants.index(r)
             icon = " 🍸" if r.get("type") == "cocktail_bar" else " 🍽️"
@@ -235,16 +236,13 @@ if action == "View All Places":
                         if st.button("Cancel Delete", key=f"can_{global_idx}", use_container_width=True):
                             del st.session_state[delete_key]
                             st.rerun()
-
                     st.markdown("---")
-
                     # Address + Map link
                     col_addr, col_map = st.columns([3, 1])
                     with col_addr:
                         st.write(f"**📍 Address:** {r.get('address', 'Not provided')}")
                     with col_map:
                         st.markdown(f"[🗺️ Open in Maps]({google_maps_link(r.get('address', ''), r['name'])})", unsafe_allow_html=True)
-
                     # Notes - safe handling
                     if r["reviews"]:
                         st.markdown("**📝 Notes**")
@@ -254,7 +252,6 @@ if action == "View All Places":
                                     st.write(str(note).strip())
                     else:
                         st.caption("_No notes yet — be the first to add one!_")
-
                     # Photos
                     if r.get("images"):
                         st.markdown("**📸 Photos**")
@@ -266,11 +263,9 @@ if action == "View All Places":
                                 if idx < num_images:
                                     with cols[j]:
                                         st.image(r["images"][idx], use_column_width=True)
-
                 else:
                     # ==================== EDIT MODE ====================
                     st.subheader(f"Editing: {r['name']}")
-
                     edit_name = st.text_input("Name", value=r["name"], key=f"edit_name_{global_idx}")
                     edit_cuisine = st.selectbox("Cuisine/Style", CUISINES, index=CUISINES.index(r["cuisine"]), key=f"edit_cuisine_{global_idx}")
                     edit_price = st.selectbox("Price", ["$", "$$", "$$$", "$$$$"], index=["$", "$$", "$$$", "$$$$"].index(r["price"]), key=f"edit_price_{global_idx}")
@@ -281,7 +276,6 @@ if action == "View All Places":
                                              format_func=lambda x: "Restaurant 🍽️" if x=="restaurant" else "Cocktail Bar 🍸",
                                              key=f"edit_type_{global_idx}")
                     edit_visited = st.checkbox("✅ I've already visited this place", value=r.get("visited", False), key=f"edit_visited_{global_idx}")
-
                     existing_date = None
                     if r.get("visited_date"):
                         try:
@@ -295,11 +289,9 @@ if action == "View All Places":
                         key=f"edit_visited_date_{global_idx}"
                     )
                     visited_date_edit = edit_visited_date if edit_visited_date is not None else None
-
                     # Photos
                     st.markdown("### Add more photos")
                     new_images = st.file_uploader("Upload additional photos", type=["png", "jpg", "jpeg", "webp"], accept_multiple_files=True, key=f"edit_images_{global_idx}")
-
                     if r.get("images"):
                         st.markdown("### Current photos")
                         images_to_delete_key = f"images_to_delete_{global_idx}"
@@ -311,15 +303,12 @@ if action == "View All Places":
                                 st.image(img_url, use_column_width=True)
                                 if st.checkbox("Delete this photo", key=f"del_img_{global_idx}_{i}"):
                                     st.session_state[images_to_delete_key].add(img_url)
-
                     # Notes editing
                     st.markdown("### Notes")
                     reviews_key = f"edit_reviews_{global_idx}"
                     if reviews_key not in st.session_state:
                         st.session_state[reviews_key] = r["reviews"][:]
-
                     current_reviews = st.session_state[reviews_key]
-
                     for rev_idx, note in enumerate(current_reviews):
                         col1, col2 = st.columns([8, 1])
                         with col1:
@@ -336,20 +325,16 @@ if action == "View All Places":
                             if st.button("🗑️", key=f"del_rev_{global_idx}_{rev_idx}"):
                                 st.session_state[reviews_key].pop(rev_idx)
                                 st.rerun()
-
                         if new_note != note:
                             st.session_state[reviews_key][rev_idx] = new_note
-
                     st.markdown("**Add a new note**")
                     new_note_text = st.text_area("New note (optional)", height=100, key=f"new_note_{global_idx}")
                     if new_note_text.strip():
                         if st.button("➕ Add Note", key=f"add_note_btn_{global_idx}"):
                             st.session_state[reviews_key].append(new_note_text.strip())
                             st.rerun()
-
                     if not current_reviews:
                         st.info("No notes yet.")
-
                     # Save / Cancel
                     col_save, col_cancel = st.columns(2)
                     with col_save:
@@ -358,7 +343,6 @@ if action == "View All Places":
                             if new_images:
                                 with st.spinner("Uploading new images..."):
                                     new_image_urls = upload_images_to_supabase(new_images, edit_name)
-
                             remaining_images = r["images"][:]
                             if images_to_delete_key in st.session_state:
                                 for url in st.session_state[images_to_delete_key]:
@@ -373,21 +357,26 @@ if action == "View All Places":
                                             supabase.storage.from_(BUCKET_NAME).remove([file_path])
                                     except:
                                         pass
-
+                            # Geocode only if address changed
                             if edit_address.strip() != r["address"]:
                                 full_address = f"{edit_address.strip()}, Chicago, IL"
-                                with st.spinner("Updating location on map..."):
-                                    location_geo = geocode(full_address)
-                                new_lat = location_geo.latitude if location_geo else None
-                                new_lon = location_geo.longitude if location_geo else None
+                                with st.spinner("Finding location on map..."):
+                                    try:
+                                        location_geo = geocode(full_address)
+                                        if location_geo:
+                                            new_lat = location_geo.latitude
+                                            new_lon = location_geo.longitude
+                                        else:
+                                            st.warning("Could not find coordinates for this address. It will not appear on the map. Try a more specific address.")
+                                            new_lat = new_lon = None
+                                    except Exception as e:
+                                        st.error(f"Geocoding error: {str(e)}")
+                                        new_lat = new_lon = None
                             else:
                                 new_lat = r.get("lat")
                                 new_lon = r.get("lon")
-
                             updated_date_str = visited_date_edit.strftime("%B %d, %Y") if visited_date_edit else None
-
                             cleaned_reviews = [n.strip() for n in st.session_state.get(reviews_key, r["reviews"]) if n and n.strip()]
-
                             restaurants[global_idx].update({
                                 "name": edit_name.strip(),
                                 "cuisine": edit_cuisine,
@@ -402,20 +391,16 @@ if action == "View All Places":
                                 "lon": new_lon,
                                 "reviews": cleaned_reviews
                             })
-
                             save_data(restaurants)
                             st.session_state.restaurants = load_data()
-
                             # Cleanup
                             del st.session_state[f"edit_mode_{global_idx}"]
                             if images_to_delete_key in st.session_state:
                                 del st.session_state[images_to_delete_key]
                             if reviews_key in st.session_state:
                                 del st.session_state[reviews_key]
-
                             st.success("Changes saved!")
                             st.rerun()
-
                     with col_cancel:
                         if st.button("❌ Cancel", use_container_width=True, key=f"cancel_{global_idx}"):
                             del st.session_state[f"edit_mode_{global_idx}"]
@@ -428,7 +413,6 @@ if action == "View All Places":
 # ────────────────────────────── Add a Place ──────────────────────────────
 elif action == "Add a Place":
     st.header("Add a New Place 📍")
- 
     name = st.text_input("Name*")
     cuisine = st.selectbox("Cuisine/Style*", CUISINES)
     price = st.selectbox("Price*", ["$", "$$", "$$$", "$$$$"])
@@ -436,22 +420,22 @@ elif action == "Add a Place":
     address = st.text_input("Address*")
     place_type = st.selectbox("Type*", ["restaurant", "cocktail_bar"],
                               format_func=lambda x: "Restaurant 🍽️" if x=="restaurant" else "Cocktail Bar 🍸")
-   
+  
     visited = st.checkbox("✅ I've already visited this place")
-   
+  
     default_date = date.today() if visited else None
-   
+  
     visited_date_input = st.date_input(
         "Date Visited (optional)",
         value=default_date,
         key="visited_date_key"
     )
-   
+  
     visited_date = visited_date_input if visited_date_input is not None else None
-   
+  
     uploaded_images = st.file_uploader("Upload photos", type=["png", "jpg", "jpeg", "webp"], accept_multiple_files=True)
     quick_notes = st.text_area("Quick notes (optional)", height=100)
-   
+  
     if st.button("Add Place", type="primary"):
         if not all([name.strip(), address.strip()]):
             st.error("Name and address required")
@@ -462,16 +446,23 @@ elif action == "Add a Place":
             if uploaded_images:
                 with st.spinner("Uploading images..."):
                     image_urls = upload_images_to_supabase(uploaded_images, name)
-           
+          
             visited_date_str = visited_date.strftime("%B %d, %Y") if visited_date else None
             full_address = f"{address.strip()}, Chicago, IL"
+            lat = lon = None
             with st.spinner("Finding location for map..."):
-                geo_location = geocode(full_address)
-            lat = geo_location.latitude if geo_location else None
-            lon = geo_location.longitude if geo_location else None
-           
+                try:
+                    geo_location = geocode(full_address)
+                    if geo_location:
+                        lat = geo_location.latitude
+                        lon = geo_location.longitude
+                    else:
+                        st.warning("Could not find coordinates for this address — it won't appear on the map. Check spelling or add more details (e.g., '123 N Michigan Ave').")
+                except Exception as e:
+                    st.error(f"Geocoding error: {str(e)}")
+          
             new_reviews = [quick_notes.strip()] if quick_notes.strip() else []
-           
+          
             new = {
                 "name": name.strip(),
                 "cuisine": cuisine,
@@ -487,11 +478,11 @@ elif action == "Add a Place":
                 "lat": lat,
                 "lon": lon
             }
-           
+          
             try:
                 supabase.table("restaurants").insert(new).execute()
                 st.session_state.restaurants = load_data()
-                st.success(f"{name} added and pinned on the map!")
+                st.success(f"{name} added! {'Pinned on map 🗺️' if lat and lon else 'Address not mapped yet'}")
                 st.rerun()
             except Exception as e:
                 st.error(f"Failed to add place: {str(e)}")
@@ -499,19 +490,19 @@ elif action == "Add a Place":
 # ────────────────────────────── Map ──────────────────────────────
 elif action == "Map":
     st.header("Interactive Map 🗺️")
-  
+ 
     places_with_coords = [r for r in restaurants if r.get("lat") and r.get("lon")]
-  
+ 
     if not places_with_coords:
         st.info("No places with coordinates yet. Add places with valid Chicago addresses to see them on the map!")
         st.stop()
-  
+ 
     m = folium.Map(location=[41.8781, -87.6298], zoom_start=12, tiles="OpenStreetMap")
-  
+ 
     for place in places_with_coords:
         icon_color = "red" if place.get("visited") else "blue"
         icon_symbol = "cutlery" if place["type"] == "restaurant" else "glass-martini"
-      
+     
         popup_html = f"""
         <b>{place['name']}</b><br>
         {place['cuisine']} • {place['price']} • {place['location']}<br>
@@ -519,14 +510,14 @@ elif action == "Map":
         {"Visited: " + place.get('visited_date', '') if place.get('visited') else "Not visited yet"}
         """
         popup = folium.Popup(popup_html, max_width=300)
-      
+     
         folium.Marker(
             [place['lat'], place['lon']],
             popup=popup,
             tooltip=place['name'],
             icon=folium.Icon(color=icon_color, icon=icon_symbol, prefix='fa')
         ).add_to(m)
-  
+ 
     legend_html = '''
     <div style="
         position: fixed;
@@ -542,7 +533,7 @@ elif action == "Map":
     </div>
     '''
     m.get_root().html.add_child(folium.Element(legend_html))
-  
+ 
     st_folium(m, width=700, height=500, key="map")
 
 # ────────────────────────────── Random Pick ──────────────────────────────
