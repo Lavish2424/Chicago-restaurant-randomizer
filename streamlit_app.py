@@ -172,7 +172,6 @@ st.markdown("<h1 style='text-align: center;'>🍽️🍸 Chicago Restaurant/Bar 
 st.markdown("<p style='text-align: center;'>Add, view, and randomly pick Chicago eats & drinks!</p>", unsafe_allow_html=True)
 
 st.sidebar.header("Actions")
-# Reverted back to standard radio button without the 'key'
 action = st.sidebar.radio("What do you want to do?", ["View All Places", "Map View", "Add a Place", "Random Pick"])
 
 # Clear session state on tab change
@@ -436,8 +435,8 @@ if action == "View All Places":
 elif action == "Map View":
     st.header("Chicago Food Map 🗺️")
 
-    # 1. Base Map centered on Chicago
-    m = folium.Map(location=[41.8781, -87.6298], zoom_start=12, tiles="CartoDB positron")
+    # 1. Base Map (Using "OpenStreetMap" for full color)
+    m = folium.Map(location=[41.8781, -87.6298], zoom_start=12, tiles="OpenStreetMap")
 
     # 2. Add Floating Legend (HTML) with FontAwesome icons that match the map
     legend_html = '''
