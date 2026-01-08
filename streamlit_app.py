@@ -18,7 +18,7 @@ def load_data():
         for place in data:
             place.setdefault("favorite", False)
             place.setdefault("visited", False)
-            place.setdefault("visited_date", None) # New field
+            place.setdefault("visited_date", None)
             place.setdefault("reviews", [])
             place.setdefault("images", [])
         return data
@@ -131,6 +131,11 @@ def upload_images_to_supabase(uploaded_files, restaurant_name):
 
 # ────────────────────────────── View All Places ──────────────────────────────
 if action == "View All Places":
+    # Clear any lingering edit modes when entering this tab
+    keys_to_clear = [k for k in st.session_state.keys() if k.startswith("edit_mode_") or k.startswith("images_to_delete_") or k.startswith("del_confirm_")]
+    for k in keys_to_clear:
+        del st.session_state[k]
+
     st.header("All Places 👀")
     st.caption(f"{len(restaurants)} place(s)")
 
@@ -153,7 +158,6 @@ if action == "View All Places":
                         lower in r["cuisine"].lower() or lower in r["location"].lower() or
                         lower in r.get("address", "").lower()]
 
-        # Updated sorting logic with "Recently Added"
         if sort_option == "A-Z (Name)":
             sorted_places = sorted(filtered, key=lambda x: x["name"].lower())
         elif sort_option == "Favorites First":
@@ -224,7 +228,6 @@ if action == "View All Places":
                                     with col:
                                         st.image(r["images"][i + j], use_column_width=True)
                 else:
-                    # Edit form (unchanged)
                     st.subheader(f"Editing: {r['name']}")
                     with st.form(key=f"edit_form_{global_idx}"):
                         new_name = st.text_input("Name*", value=r["name"])
@@ -326,6 +329,11 @@ if action == "View All Places":
 
 # ────────────────────────────── Add a Place ──────────────────────────────
 elif action == "Add a Place":
+    # Clear any leftover edit/delete states (just in case)
+    keys_to_clear = [k for k in st.session_state.keys() if k.startswith("edit_mode_") or k.startswith("del_confirm_")]
+    for k in keys_to_clear:
+        del st.session_state[k]
+
     st.header("Add a New Place 📍")
    
     name = st.text_input("Name*")
@@ -382,7 +390,15 @@ elif action == "Add a Place":
 
 # ────────────────────────────── Random Pick ──────────────────────────────
 else:
+    # Clear previous random pick and any stray edit/delete states when entering this tab
+    if "last_pick" in st.session_state:
+        del st.session_state.last_pick
+    keys_to_clear = [k for k in st.session_state.keys() if k.startswith("edit_mode_") or k.startswith("del_confirm_")]
+    for k in keys_to_clear:
+        del st.session_state[k]
+
     st.header("Random Place Picker 🎲")
+
     if not restaurants:
         st.info("Add places first!")
     else:
@@ -426,46 +442,47 @@ else:
                 st.session_state.last_pick = picked
                 st.rerun()
 
-            if "last_pick" in st.session_state and st.session_state.last_pick in filtered:
+            if "last_pick" in st.session_state:
                 c = st.session_state.last_pick
-                st.markdown("---")
-                with st.container(border=True):
-                    tag = " 🍸 Cocktail Bar" if c.get("type")=="cocktail_bar" else " 🍽️ Restaurant"
-                    fav = " ❤️" if c.get("favorite") else ""
-                    vis = " ✅ Visited" if c.get("visited") else ""
-                    vis_date = f" ({c.get('visited_date')})" if c.get("visited_date") else ""
-                    st.markdown(f"# {c['name']}")
-                    st.caption(f"{tag}{fav}{vis}{vis_date}")
-                    st.markdown(f"**{c['cuisine']} • {c['price']} • {c['location']}**")
-                    idx = restaurants.index(c)
-                    col_fav, col_vis = st.columns(2)
-                    with col_fav:
-                        if st.button("❤️ Unfavorite" if c.get("favorite") else "❤️ Favorite", key=f"rand_fav_{idx}", use_container_width=True):
-                            toggle_favorite(idx)
-                    with col_vis:
-                        if st.button("✅ Mark as Unvisited" if c.get("visited") else "✅ Mark as Visited", key=f"rand_vis_{idx}", type="secondary", use_container_width=True):
-                            toggle_visited(idx)
+                if c in filtered:
                     st.markdown("---")
-                    st.write(f"📍 **Address:** {c.get('address','')}")
-                    st.markdown(f"[Open in Google Maps ↗️]({google_maps_link(c.get('address',''), c['name'])})")
-                    if c["reviews"]:
-                        st.markdown("### 📝 Notes")
-                        for rev in c["reviews"]:
-                            with st.chat_message("user"):
-                                st.write(f"**{rev['date']}**")
-                                st.write(rev['comment'])
-                    else:
-                        st.info("No notes yet!")
-                    if c.get("images"):
-                        st.markdown("### 📸 Photos")
-                        cols = st.columns(3)
-                        for i, img_url in enumerate(c["images"]):
-                            with cols[i % 3]:
-                                st.image(img_url, use_column_width=True)
-                    st.markdown("---")
-                    if st.button("🎲 Pick Again (from same filters)", type="secondary", use_container_width=True):
-                        picked = random.choice(filtered)
-                        st.session_state.last_pick = picked
-                        st.rerun()
-            elif "last_pick" in st.session_state:
-                st.info("Previous pick no longer matches filters – pick again!")
+                    with st.container(border=True):
+                        tag = " 🍸 Cocktail Bar" if c.get("type")=="cocktail_bar" else " 🍽️ Restaurant"
+                        fav = " ❤️" if c.get("favorite") else ""
+                        vis = " ✅ Visited" if c.get("visited") else ""
+                        vis_date = f" ({c.get('visited_date')})" if c.get("visited_date") else ""
+                        st.markdown(f"# {c['name']}")
+                        st.caption(f"{tag}{fav}{vis}{vis_date}")
+                        st.markdown(f"**{c['cuisine']} • {c['price']} • {c['location']}**")
+                        idx = restaurants.index(c)
+                        col_fav, col_vis = st.columns(2)
+                        with col_fav:
+                            if st.button("❤️ Unfavorite" if c.get("favorite") else "❤️ Favorite", key=f"rand_fav_{idx}", use_container_width=True):
+                                toggle_favorite(idx)
+                        with col_vis:
+                            if st.button("✅ Mark as Unvisited" if c.get("visited") else "✅ Mark as Visited", key=f"rand_vis_{idx}", type="secondary", use_container_width=True):
+                                toggle_visited(idx)
+                        st.markdown("---")
+                        st.write(f"📍 **Address:** {c.get('address','')}")
+                        st.markdown(f"[Open in Google Maps ↗️]({google_maps_link(c.get('address',''), c['name'])})")
+                        if c["reviews"]:
+                            st.markdown("### 📝 Notes")
+                            for rev in c["reviews"]:
+                                with st.chat_message("user"):
+                                    st.write(f"**{rev['date']}**")
+                                    st.write(rev['comment'])
+                        else:
+                            st.info("No notes yet!")
+                        if c.get("images"):
+                            st.markdown("### 📸 Photos")
+                            cols = st.columns(3)
+                            for i, img_url in enumerate(c["images"]):
+                                with cols[i % 3]:
+                                    st.image(img_url, use_column_width=True)
+                        st.markdown("---")
+                        if st.button("🎲 Pick Again (from same filters)", type="secondary", use_container_width=True):
+                            picked = random.choice(filtered)
+                            st.session_state.last_pick = picked
+                            st.rerun()
+                else:
+                    st.info("Previous pick no longer matches current filters — pick again!")
