@@ -438,8 +438,7 @@ elif action == "Map View":
     # 1. Base Map centered on Chicago
     m = folium.Map(location=[41.8781, -87.6298], zoom_start=12, tiles="CartoDB positron")
 
-    # 2. Add Floating Legend (HTML) with Emojis to ensure visibility
-    # Note: Using Emojis 🟢/⚪ for colors is safer in the Legend div than FontAwesome classes
+    # 2. Add Floating Legend (HTML) with Emojis
     legend_html = '''
     <div style="position: fixed; 
      bottom: 20px; right: 20px; width: 140px; height: 130px; 
@@ -469,9 +468,15 @@ elif action == "Map View":
             # Logic for Colors: Green (Visited) vs Gray (Not Visited)
             color = "green" if r.get("visited") else "gray"
             
-            # Logic for Icons: Glass (Cocktail) vs Cutlery (Restaurant)
-            # Prefix 'fa' is required for these standard icons
-            icon_name = "glass" if r["type"] == "cocktail_bar" else "cutlery"
+            # UPDATED: Using 'glyphicon' instead of 'fa' for better stability
+            # 'glass' in glyphicon = Martini Glass
+            # 'cutlery' in glyphicon = Knife & Fork
+            if r["type"] == "cocktail_bar":
+                icon_name = "glass"
+                icon_prefix = "glyphicon"
+            else:
+                icon_name = "cutlery"
+                icon_prefix = "glyphicon"
             
             html = f"""
             <div style="font-family: sans-serif; width: 200px;">
@@ -486,7 +491,7 @@ elif action == "Map View":
                 [lat, lon],
                 popup=folium.Popup(html, max_width=250),
                 tooltip=r["name"],
-                icon=folium.Icon(color=color, icon=icon_name, prefix='fa')
+                icon=folium.Icon(color=color, icon=icon_name, prefix=icon_prefix)
             ).add_to(m)
         else:
             places_skipped += 1
