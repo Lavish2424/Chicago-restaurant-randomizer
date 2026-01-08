@@ -280,11 +280,7 @@ if action == "View All Places":
                         key=f"edit_visited_date_{global_idx}"
                     )
 
-                    # Handle manual clearing (Streamlit uses ancient date when cleared)
-                    if edit_visited_date.year < 1000:
-                        visited_date_edit = None
-                    else:
-                        visited_date_edit = edit_visited_date
+                    visited_date_edit = edit_visited_date if edit_visited_date is not None else None
 
                     st.markdown("### Add more photos")
                     new_images = st.file_uploader("Upload additional photos", type=["png", "jpg", "jpeg", "webp"], accept_multiple_files=True, key=f"edit_images_{global_idx}")
@@ -391,11 +387,7 @@ elif action == "Add a Place":
         key="visited_date_key"
     )
     
-    # Handle clearing in Add mode as well
-    if visited_date_input.year < 1000:
-        visited_date = None
-    else:
-        visited_date = visited_date_input
+    visited_date = visited_date_input if visited_date_input is not None else None
     
     uploaded_images = st.file_uploader("Upload photos", type=["png", "jpg", "jpeg", "webp"], accept_multiple_files=True)
     quick_notes = st.text_area("Quick notes (optional)", height=100)
