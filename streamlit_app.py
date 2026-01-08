@@ -7,7 +7,6 @@ import os
 from streamlit_folium import st_folium
 import folium
 from geopy.geocoders import ArcGIS
-# NEW IMPORTS
 import time
 from folium.plugins import LocateControl, MarkerCluster
 
@@ -453,12 +452,11 @@ elif action == "Map View":
     # 4. Add Floating Legend (HTML) with FontAwesome icons
     legend_html = '''
     <div style="position: fixed; 
-     bottom: 20px; right: 20px; width: 140px; height: 160px; 
+     bottom: 20px; right: 20px; width: 140px; height: 130px; 
      border:2px solid grey; z-index:9999; font-size:14px;
      background-color:white; opacity: 0.9;
      padding: 10px; border-radius: 5px;">
      <b>Legend</b><br>
-     <i class="fa fa-map-marker" style="color:blue; font-size:16px;"></i>  You<br>
      <i class="fa fa-map-marker" style="color:green; font-size:16px;"></i>  Visited<br>
      <i class="fa fa-map-marker" style="color:gray; font-size:16px;"></i>  Not Visited<br>
      <br>
@@ -626,14 +624,13 @@ else:
             st.warning("No matches – try broader filters!")
         else:
             if st.button("🎲 Pick Random Place!", type="primary", use_container_width=True):
-                # ANIMATION LOOP
+                # ANIMATION LOOP (UPDATED: Faster and Longer)
                 placeholder = st.empty()
-                # Flash 12 random names quickly to simulate a "spin"
-                for _ in range(12):
+                # 50 iterations at 0.05s = 2.5 seconds total
+                for _ in range(50):
                     temp_pick = random.choice(filtered)
-                    # Display the temp pick in a nice large header format
                     placeholder.markdown(f"## 🎲 {temp_pick['name']}")
-                    time.sleep(0.1) # Wait 0.1s
+                    time.sleep(0.05)
                 placeholder.empty()
 
                 picked = random.choice(filtered)
@@ -680,10 +677,10 @@ else:
                         if st.button("🎲 Pick Again (from same filters)", type="secondary", use_container_width=True):
                             # Same animation for "Pick Again"
                             placeholder = st.empty()
-                            for _ in range(12):
+                            for _ in range(50):
                                 temp_pick = random.choice(filtered)
                                 placeholder.markdown(f"## 🎲 {temp_pick['name']}")
-                                time.sleep(0.1)
+                                time.sleep(0.05)
                             placeholder.empty()
 
                             picked = random.choice(filtered)
