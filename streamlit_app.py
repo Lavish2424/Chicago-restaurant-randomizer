@@ -7,10 +7,8 @@ import os
 from streamlit_folium import st_folium
 import folium
 from geopy.geocoders import ArcGIS
+# Import only the stable Map locator, remove the crashing streamlit_js_eval
 from folium.plugins import LocateControl
-# NEW IMPORTS for "Near Me" feature
-from streamlit_js_eval import get_geolocation
-from geopy.distance import geodesic
 
 # ==================== SUPABASE SETUP ====================
 try:
@@ -442,13 +440,13 @@ elif action == "Map View":
     # 1. Base Map (Using "OpenStreetMap" for full color)
     m = folium.Map(location=[41.8781, -87.6298], zoom_start=12, tiles="OpenStreetMap")
 
-    # 2. Add Native "Locate Me" Button
+    # 2. Add Native "Locate Me" Button (Stable)
     LocateControl(
         auto_start=False,
         strings={"title": "Show me where I am", "popup": "You are here!"}
     ).add_to(m)
 
-    # 3. Add Floating Legend (HTML) with FontAwesome icons that match the map
+    # 3. Add Floating Legend (HTML) with FontAwesome icons
     legend_html = '''
     <div style="position: fixed; 
      bottom: 20px; right: 20px; width: 140px; height: 130px; 
@@ -475,10 +473,10 @@ elif action == "Map View":
         if lat is not None and lon is not None:
             places_mapped += 1
             
-            # Logic for Colors: Green (Visited) vs Gray (Not Visited)
+            # Color Logic
             color = "green" if r.get("visited") else "gray"
             
-            # Using 'glyphicon' so the martini glass works reliably
+            # Icon Logic
             if r["type"] == "cocktail_bar":
                 icon_name = "glass"
                 icon_prefix = "glyphicon"
@@ -585,7 +583,6 @@ elif action == "Add a Place":
 # ────────────────────────────── Random Pick ──────────────────────────────
 else:
     st.header("Random Place Picker 🎲")
-    
     if not restaurants:
         st.info("Add places first!")
     else:
@@ -608,60 +605,16 @@ else:
                 st.write("")
                 st.write("")
                 only_fav = st.checkbox("❤️ Favorites only")
-            
-            # "Near Me" Feature
-            st.markdown("---")
-            col_near, col_slider = st.columns([1, 3])
-            
-            user_lat, user_lon = None, None
-            
-            with col_near:
-                near_me = st.checkbox("📍 Near Me")
-            
-            if near_me:
-                # Call get_geolocation ONLY when the user checks "Near Me"
-                # This prevents it from firing on main load and crashing the app
-                loc = get_geolocation(key="random_loc")
-                
-                if loc and 'coords' in loc:
-                    user_lat = loc['coords']['latitude']
-                    user_lon = loc['coords']['longitude']
-                else:
-                    st.caption("Waiting for location...")
-
-            with col_slider:
-                radius = 2.0
-                if near_me:
-                    if user_lat:
-                        radius = st.slider("Within miles", 0.5, 10.0, 2.0)
-                    else:
-                        st.write("") # Spacer
-
-        filtered = []
-        for r in restaurants:
-            # 1. Apply Standard Filters
-            if only_fav and not r.get("favorite"): continue
-            if type_filter != "all" and r.get("type") != type_filter: continue
-            if cuisine_filter and r["cuisine"] not in cuisine_filter: continue
-            if price_filter and r["price"] not in price_filter: continue
-            if location_filter and r["location"] not in location_filter: continue
-            if visited_filter == "Visited Only" and not r.get("visited"): continue
-            if visited_filter == "Not Visited Yet" and r.get("visited"): continue
-            
-            # 2. Apply "Near Me" Filter
-            if near_me and user_lat:
-                if r.get("latitude") and r.get("longitude"):
-                    place_loc = (r["latitude"], r["longitude"])
-                    user_loc = (user_lat, user_lon)
-                    # Calculate distance in miles
-                    distance = geodesic(user_loc, place_loc).miles
-                    if distance > radius:
-                        continue
-                else:
-                    # Skip places without coordinates if filtering by distance
-                    continue
-            
-            filtered.append(r)
+        
+        filtered = [r for r in restaurants
+                    if (not only_fav or r.get("favorite"))
+                    and (type_filter == "all" or r.get("type") == type_filter)
+                    and (not cuisine_filter or r["cuisine"] in cuisine_filter)
+                    and (not price_filter or r["price"] in price_filter)
+                    and (not location_filter or r["location"] in location_filter)
+                    and (visited_filter == "All" or
+                         (visited_filter == "Visited Only" and r.get("visited")) or
+                         (visited_filter == "Not Visited Yet" and not r.get("visited")))]
         
         st.caption(f"**{len(filtered)} places** match your filters")
         if not filtered:
