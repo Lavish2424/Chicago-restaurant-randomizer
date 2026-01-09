@@ -612,6 +612,8 @@ else:
             st.warning("No matches – try broader filters!")
         else:
             if st.button("🎲 Pick Random Place!", type="primary", use_container_width=True):
+                if "last_pick" in st.session_state:
+                    del st.session_state.last_pick
                 # ANIMATION LOOP (Faster and Longer)
                 placeholder = st.empty()
                 for _ in range(50):
@@ -661,6 +663,8 @@ else:
                                     st.image(img_url, use_column_width=True)
                         st.markdown("---")
                         if st.button("🎲 Pick Again (from same filters)", type="secondary", use_container_width=True):
+                            if "last_pick" in st.session_state:
+                                del st.session_state.last_pick
                             # Same animation for "Pick Again"
                             placeholder = st.empty()
                             for _ in range(50):
