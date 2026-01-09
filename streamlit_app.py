@@ -19,14 +19,13 @@ except FileNotFoundError:
 supabase: Client = create_client(supabase_url, supabase_key)
 BUCKET_NAME = "restaurant-images"
 # Initialize ArcGIS Geocoder
-# FIX: For better rate limits, sign up for free Esri Developer account (developers.arcgis.com) and set ARCGIS_USERNAME/ARCGIS_PASSWORD in secrets.toml
+# For better rate limits, sign up for free Esri Developer account (developers.arcgis.com) and set ARCGIS_USERNAME/ARCGIS_PASSWORD in secrets.toml
 # Then: geolocator = ArcGIS(username=st.secrets["ARCGIS_USERNAME"], password=st.secrets["ARCGIS_PASSWORD"], timeout=10)
 geolocator = ArcGIS(timeout=10)
 # ==================== HELPER FUNCTIONS ====================
 def get_lat_lon(address):
     """Converts an address string to latitude and longitude using ArcGIS."""
     try:
-        # FIX: Add delay and retry for rate limiting
         time.sleep(1)  # 1-second delay to avoid throttling
         clean_addr = address.strip()
         if not clean_addr:
@@ -105,7 +104,6 @@ def save_data(data):
             if place_id:
                 supabase.table("restaurants").update(update_data).eq("id", place_id).execute()
             else:
-                # FIX: For inserts, return the inserted data instead of reloading full list
                 response = supabase.table("restaurants").insert(update_data).execute()
                 return response.data[0] if response.data else None  # Return new record with ID
     except Exception as e:
@@ -132,18 +130,15 @@ def delete_restaurant(index):
     if "id" in r:
         supabase.table("restaurants").delete().eq("id", r["id"]).execute()
     del restaurants[index]
-    # FIX: No need to reload full data; local list is updated
     st.success(f"{r['name']} deleted!")
     st.rerun()
 def toggle_favorite(idx):
     restaurants[idx]["favorite"] = not restaurants[idx].get("favorite", False)
     save_data([restaurants[idx]])  # Save only the changed one
-    # FIX: No reload; local is updated
     st.rerun()
 def toggle_visited(idx):
     restaurants[idx]["visited"] = not restaurants[idx].get("visited", False)
     save_data([restaurants[idx]])  # Save only the changed one
-    # FIX: No reload; local is updated
     st.rerun()
 def google_maps_link(address, name=""):
     query = f"{name}, {address}" if name else address
@@ -410,8 +405,7 @@ if action == "View All Places":
                                 "latitude": new_lat,
                                 "longitude": new_lon
                             })
-                            save_data([restaurants[global_idx]])  # FIX: Save only the changed one
-                            # FIX: No reload; local is updated
+                            save_data([restaurants[global_idx]]) 
                             del st.session_state[f"edit_mode_{global_idx}"]
                             if images_to_delete_key in st.session_state:
                                 del st.session_state[images_to_delete_key]
@@ -561,7 +555,6 @@ elif action == "Add a Place":
             }
       
             try:
-                # FIX: Insert and get new record with ID, append to local without full reload
                 inserted = save_data([new])  # Pass as list for insert
                 if inserted:
                     restaurants.append(inserted)
