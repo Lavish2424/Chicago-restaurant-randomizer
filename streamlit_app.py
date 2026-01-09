@@ -493,4 +493,183 @@ elif action == "Map View":
             folium.Marker(
                 [lat, lon],
                 popup=folium.Popup(html, max_width=250),
-                tooltip=r["
+                tooltip=r["name"],
+                icon=folium.Icon(color=color, icon=icon_name, prefix=icon_prefix)
+            ).add_to(marker_cluster) # Add to cluster instead of map directly
+        else:
+            places_skipped += 1
+    st.caption(f"Showing {places_mapped} location(s).")
+    if places_skipped > 0:
+        st.caption(f"({places_skipped} places hidden due to missing address coordinates)")
+    
+    st_folium(m, width="100%", height=600)
+# ────────────────────────────── Add a Place ──────────────────────────────
+elif action == "Add a Place":
+    st.header("Add a New Place 📍")
+    name = st.text_input("Name*")
+    cuisine = st.selectbox("Cuisine/Style*", CUISINES)
+    price = st.selectbox("Price*", ["$", "$$", "$$$", "$$$$"])
+    location = st.selectbox("Neighborhood*", NEIGHBORHOODS)
+    address = st.text_input("Address*")
+    place_type = st.selectbox("Type*", ["restaurant", "cocktail_bar"],
+                              format_func=lambda x: "Restaurant 🍽️" if x=="restaurant" else "Cocktail Bar 🍸")
+  
+    visited = st.checkbox("✅ I've already visited this place")
+    default_date = date.today() if visited else None
+    visited_date = st.date_input("Date Visited", value=default_date) if visited else None
+  
+    uploaded_images = st.file_uploader("Upload photos", type=["png", "jpg", "jpeg", "webp"], accept_multiple_files=True)
+    quick_notes = st.text_area("Quick notes (optional)", height=100)
+  
+    if st.button("Add Place", type="primary"):
+        if not all([name.strip(), address.strip()]):
+            st.error("Name and address required")
+        elif any(r["name"].lower() == name.lower().strip() for r in restaurants):
+            st.warning("Already exists!")
+        else:
+            # === GEOCODING STEP (Using ArcGIS) ===
+            lat, lon = None, None
+            with st.spinner(f"Locating '{address}'..."):
+                lat, lon = get_lat_lon(address.strip())
+        
+            if lat is None:
+                st.warning("⚠️ Could not find specific coordinates for this address. It will save, but won't appear on the map pin.")
+            else:
+                st.toast("✅ Location found!")
+            image_urls = []
+            if uploaded_images:
+                with st.spinner("Uploading images..."):
+                    image_urls = upload_images_to_supabase(uploaded_images, name)
+      
+            visited_date_str = visited_date.strftime("%B %d, %Y") if visited_date else None
+            new_reviews = [quick_notes.strip()] if quick_notes.strip() else []
+      
+            new = {
+                "name": name.strip(),
+                "cuisine": cuisine,
+                "price": price,
+                "location": location,
+                "address": address.strip(),
+                "type": place_type,
+                "favorite": False,
+                "visited": visited,
+                "visited_date": visited_date_str,
+                "reviews": new_reviews,
+                "images": image_urls,
+                "latitude": lat,
+                "longitude": lon
+            }
+      
+            try:
+                # FIX: Insert and get new record with ID, append to local without full reload
+                inserted = save_data([new])  # Pass as list for insert
+                if inserted:
+                    restaurants.append(inserted)
+                    st.success(f"{name} added successfully!")
+                    st.rerun()
+                else:
+                    st.error("Failed to add place.")
+            except Exception as e:
+                st.error(f"Failed to add place: {str(e)}")
+# ────────────────────────────── Random Pick ──────────────────────────────
+else:
+    st.header("Random Place Picker 🎲")
+    if not restaurants:
+        st.info("Add places first!")
+    else:
+        with st.container(border=True):
+            st.markdown("### 🕵️ Filter Options")
+            c1, c2, c3 = st.columns(3)
+            with c1:
+                cuisine_filter = st.multiselect("Cuisine", sorted({r["cuisine"] for r in restaurants}))
+            with c2:
+                location_filter = st.multiselect("Neighborhood", sorted({r["location"] for r in restaurants}))
+            with c3:
+                price_filter = st.multiselect("Price", sorted({r["price"] for r in restaurants}, key=len))
+            c4, c5, c6 = st.columns(3)
+            with c4:
+                type_filter = st.selectbox("Type", ["all", "restaurant", "cocktail_bar"],
+                                           format_func=lambda x: {"all":"All", "restaurant":"Restaurants 🍽️", "cocktail_bar":"Bars 🍸"}[x])
+            with c5:
+                visited_filter = st.selectbox("Visited Status", VISITED_OPTIONS)
+            with c6:
+                st.write("")
+                st.write("")
+                only_fav = st.checkbox("❤️ Favorites only")
+    
+        filtered = [r for r in restaurants
+                    if (not only_fav or r.get("favorite"))
+                    and (type_filter == "all" or r.get("type") == type_filter)
+                    and (not cuisine_filter or r["cuisine"] in cuisine_filter)
+                    and (not price_filter or r["price"] in price_filter)
+                    and (not location_filter or r["location"] in location_filter)
+                    and (visited_filter == "All" or
+                         (visited_filter == "Visited Only" and r.get("visited")) or
+                         (visited_filter == "Not Visited Yet" and not r.get("visited")))]
+    
+        st.caption(f"**{len(filtered)} places** match your filters")
+        if not filtered:
+            st.warning("No matches – try broader filters!")
+        else:
+            if st.button("🎲 Pick Random Place!", type="primary", use_container_width=True):
+                # ANIMATION LOOP (Faster and Longer)
+                placeholder = st.empty()
+                for _ in range(50):
+                    temp_pick = random.choice(filtered)
+                    placeholder.markdown(f"## 🎲 {temp_pick['name']}")
+                    time.sleep(0.05)
+                placeholder.empty()
+                picked = random.choice(filtered)
+                st.session_state.last_pick = picked
+                st.rerun()
+        
+            if "last_pick" in st.session_state:
+                c = st.session_state.last_pick
+                if c in filtered:
+                    st.markdown("---")
+                    with st.container(border=True):
+                        tag = " 🍸 Cocktail Bar" if c.get("type")=="cocktail_bar" else " 🍽️ Restaurant"
+                        fav = " ❤️" if c.get("favorite") else ""
+                        vis = " ✅ Visited" if c.get("visited") else ""
+                        vis_date = f" ({c.get('visited_date')})" if c.get("visited_date") else ""
+                        st.markdown(f"# {c['name']}{tag}{fav}{vis}{vis_date}")
+                        st.markdown(f"**{c['cuisine']} • {c['price']} • {c['location']}**")
+                        idx = restaurants.index(c)
+                        col_fav, col_vis = st.columns(2)
+                        with col_fav:
+                            if st.button("❤️ Unfavorite" if c.get("favorite") else "❤️ Favorite", key=f"rand_fav_{idx}", use_container_width=True):
+                                toggle_favorite(idx)
+                        with col_vis:
+                            if st.button("✅ Mark as Unvisited" if c.get("visited") else "✅ Mark as Visited", key=f"rand_vis_{idx}", type="secondary", use_container_width=True):
+                                toggle_visited(idx)
+                        st.markdown("---")
+                        st.write(f"📍 **Address:** {c.get('address','')}")
+                        st.markdown(f"[🗺️ Open in Google Maps]({google_maps_link(c.get('address',''), c['name'])})", unsafe_allow_html=True)
+                        if c["reviews"]:
+                            st.markdown("### 📝 Notes")
+                            for note in c["reviews"]:
+                                if note and str(note).strip():
+                                    with st.container(border=True):
+                                        st.write(str(note).strip())
+                        else:
+                            st.info("No notes yet!")
+                        if c.get("images"):
+                            st.markdown("### 📸 Photos")
+                            cols = st.columns(3)
+                            for i, img_url in enumerate(c["images"]):
+                                with cols[i % 3]:
+                                    st.image(img_url, use_column_width=True)
+                        st.markdown("---")
+                        if st.button("🎲 Pick Again (from same filters)", type="secondary", use_container_width=True):
+                            # Same animation for "Pick Again"
+                            placeholder = st.empty()
+                            for _ in range(50):
+                                temp_pick = random.choice(filtered)
+                                placeholder.markdown(f"## 🎲 {temp_pick['name']}")
+                                time.sleep(0.05)
+                            placeholder.empty()
+                            picked = random.choice(filtered)
+                            st.session_state.last_pick = picked
+                            st.rerun()
+                else:
+                    st.info("Previous pick no longer matches current filters — pick again!")
