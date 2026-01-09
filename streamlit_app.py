@@ -438,7 +438,7 @@ elif action == "Map View":
     <div style="position: fixed;
      bottom: 20px; right: 20px; width: 140px; height: 160px;
      border:2px solid grey; z-index:9999; font-size:14px;
-     background-color:AntiqueWhite; opacity: 0.9;
+     background-color:DarkGrey; opacity: 0.9;
      padding: 10px; border-radius: 5px;">
      <b>Legend</b><br>
      <i class="fa fa-map-marker" style="color:blue; font-size:16px;"></i>  You<br>
