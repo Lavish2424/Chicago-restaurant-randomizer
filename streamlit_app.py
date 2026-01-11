@@ -183,7 +183,7 @@ if st.session_state.previous_action != action:
 st.sidebar.markdown("---")
 st.sidebar.caption("Built by Alan, made for us ❤️")
 NEIGHBORHOODS = ["Fulton Market", "River North", "Gold Coast", "South Loop", "Chinatown", "Pilsen", "West Town", "West Loop", "Lincoln Park", "Wicker Park", "Logan Square"]
-CUISINES = ["American", "Asian", "Mexican", "Japanese", "Italian", "Indian", "Thai", "French", "Seafood", "Steakhouse", "Cocktails", "Other"]
+CUISINES = ["American", "Asian", "Mexican", "Japanese", "Italian", "Indian", "Thai", "French", "Seafood", "Steakhouse", "Cocktails", "Chinese", "Mediterranean", "Other"]
 VISITED_OPTIONS = ["All", "Visited Only", "Not Visited Yet"]
 # ────────────────────────────── View All Places ──────────────────────────────
 if action == "View All Places":
