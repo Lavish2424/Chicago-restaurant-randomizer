@@ -169,9 +169,25 @@ restaurants = st.session_state.restaurants
 st.markdown("<h1 style='text-align: center;'>🍽️🍸 Chicago Restaurant/Bar Randomizer</h1>", unsafe_allow_html=True)
 st.markdown("<p style='text-align: center;'>Add, view, and randomly pick Chicago eats & drinks!</p>", unsafe_allow_html=True)
 
-# Display success message if set (using toast for bottom banner visibility on mobile)
+# Display success message if set (custom green banner at bottom)
 if "success_message" in st.session_state:
-    st.toast(st.session_state.success_message, icon="✅")
+    message = st.session_state.success_message
+    st.markdown(
+        f"""
+        <div id="success-banner" style="position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%); background-color: #28a745; color: white; padding: 10px 20px; border-radius: 5px; box-shadow: 0 2px 4px rgba(0,0,0,0.2); z-index: 1000; text-align: center;">
+            {message}
+        </div>
+        <script>
+            setTimeout(function() {{
+                var banner = document.getElementById('success-banner');
+                if (banner) {{
+                    banner.style.display = 'none';
+                }}
+            }}, 5000);
+        </script>
+        """,
+        unsafe_allow_html=True
+    )
     del st.session_state.success_message
 
 st.sidebar.header("Actions")
