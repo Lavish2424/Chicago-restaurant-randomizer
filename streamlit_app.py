@@ -436,7 +436,7 @@ elif action == "Map View":
     # 4. Add Floating Legend (HTML) with FontAwesome icons
     legend_html = '''
     <div style="position: fixed;
-      bottom: 25px; right: 15px; width: 130px; height: 135px;
+      bottom: 25px; right: 15px; width: 120px; height: 135px;
       border:2px solid black; z-index:9999; font-size:12px;
       background-color:white; opacity: 0.7;
       padding: 5px; border-radius: 5px; color: black; overflow: auto;">
