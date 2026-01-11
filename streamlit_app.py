@@ -436,17 +436,17 @@ elif action == "Map View":
     # 4. Add Floating Legend (HTML) with FontAwesome icons
     legend_html = '''
     <div style="position: fixed;
-     bottom: 20px; right: 20px; width: 140px; height: 160px;
-     border:2px solid black; z-index:9999; font-size:14px;
-     background-color:white; opacity: 0.7;
-     padding: 10px; border-radius: 5px; color: black; overflow: auto;">
-     <b>Legend</b><br>
-     <i class="fa fa-map-marker" style="color:blue; font-size:16px;"></i>  You<br>
-     <i class="fa fa-map-marker" style="color:green; font-size:16px;"></i>  Visited<br>
-     <i class="fa fa-map-marker" style="color:gray; font-size:16px;"></i>  Not Visited<br>
-     <br>
-     🍽️ Restaurant<br>
-     🍸 Cocktail Bar
+      bottom: 10px; right: 10px; width: 110px; height: 130px;
+      border:2px solid black; z-index:9999; font-size:12px;
+      background-color:white; opacity: 0.7;
+      padding: 5px; border-radius: 5px; color: black; overflow: auto;">
+      <b>Legend</b><br>
+      <i class="fa fa-map-marker" style="color:blue; font-size:14px;"></i>&nbsp; You<br>
+      <i class="fa fa-map-marker" style="color:green; font-size:14px;"></i>&nbsp; Visited<br>
+      <i class="fa fa-map-marker" style="color:gray; font-size:14px;"></i>&nbsp; Not Visited<br>
+      <br>
+      🍽️ Restaurant<br>
+      🍸 Cocktail Bar
     </div>
     '''
     m.get_root().html.add_child(folium.Element(legend_html))
