@@ -424,29 +424,39 @@ if action == "View All Places":
 # ────────────────────────────── Map View ──────────────────────────────
 elif action == "Map View":
     st.header("Chicago Food Map 🗺️")
+    
     # 1. Base Map (Using "OpenStreetMap" for full color)
     m = folium.Map(location=[41.8781, -87.6298], zoom_start=12, tiles="OpenStreetMap")
+    
     # 2. Add Native "Locate Me" Button (Stable)
     LocateControl(
         auto_start=False,
         strings={"title": "Show me where I am", "popup": "You are here!"}
     ).add_to(m)
+    
     # 3. Add Clustering
     marker_cluster = MarkerCluster().add_to(m)
-    # 4. Add Floating Legend (HTML) with FontAwesome icons
+    
+    # 4. Add Floating Collapsible Legend (HTML)
     legend_html = '''
-    <div style="position: fixed;
-      bottom: 25px; right: 15px; width: 110px; height: 135px;
-      border:2px solid black; z-index:9999; font-size:12px;
-      background-color:white; opacity: 0.7;
-      padding: 5px; border-radius: 5px; color: black; overflow: auto;">
-      <b>Legend</b><br>
-      <i class="fa fa-map-marker" style="color:blue; font-size:14px;"></i>&nbsp; You<br>
-      <i class="fa fa-map-marker" style="color:green; font-size:14px;"></i>&nbsp; Visited<br>
-      <i class="fa fa-map-marker" style="color:gray; font-size:14px;"></i>&nbsp; Not Visited<br>
-      <br>
-      🍽️ Restaurant<br>
-      🍸 Cocktail Bar
+    <div style="position: fixed; 
+                bottom: 25px; right: 15px; width: 120px; height: auto;
+                border:2px solid black; z-index:9999; font-size:12px;
+                background-color: white; opacity: 0.9;
+                padding: 0px; border-radius: 5px; color: black;">
+        <details open>
+            <summary style="cursor: pointer; padding: 5px; font-weight: bold; background-color: #eee;">
+                Legend 🗺️
+            </summary>
+            <div style="padding: 5px;">
+                <i class="fa fa-map-marker" style="color:blue; font-size:14px;"></i>&nbsp; You<br>
+                <i class="fa fa-map-marker" style="color:green; font-size:14px;"></i>&nbsp; Visited<br>
+                <i class="fa fa-map-marker" style="color:gray; font-size:14px;"></i>&nbsp; Not Visited<br>
+                <hr style="margin: 5px 0;">
+                🍽️ Restaurant<br>
+                🍸 Cocktail Bar
+            </div>
+        </details>
     </div>
     '''
     m.get_root().html.add_child(folium.Element(legend_html))
