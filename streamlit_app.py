@@ -440,11 +440,12 @@ elif action == "Map View":
     # 4. Add Floating Collapsible Legend (HTML)
     legend_html = '''
     <div style="position: fixed; 
-                bottom: 25px; right: 15px; width: 120px; height: auto;
-                border:2px solid black; z-index:9999; font-size:12px;
+                top: 10px; right: 10px; width: 120px; height: auto;
+                max-height: 300px; overflow-y: auto;
+                border: 2px solid black; z-index: 9999; font-size: 12px;
                 background-color: white; opacity: 0.9;
                 padding: 0px; border-radius: 5px; color: black;">
-        <details >
+        <details open>
             <summary style="cursor: pointer; padding: 5px; font-weight: bold; background-color: #eee;">
                 Legend 🗺️
             </summary>
@@ -457,7 +458,7 @@ elif action == "Map View":
                 🍸 Cocktail Bar
             </div>
         </details>
-    </div>
+    </div
     '''
     m.get_root().html.add_child(folium.Element(legend_html))
     places_mapped = 0
