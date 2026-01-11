@@ -439,7 +439,7 @@ elif action == "Map View":
      bottom: 20px; right: 20px; width: 140px; height: 160px;
      border:2px solid black; z-index:9999; font-size:14px;
      background-color:lightslategrey; opacity: 0.9;
-     padding: 10px; border-radius: 5px; color: white; overflow: auto;">
+     padding: 10px; border-radius: 5px; color: black; overflow: auto;">
      <b>Legend</b><br>
      <i class="fa fa-map-marker" style="color:blue; font-size:16px;"></i>  You<br>
      <i class="fa fa-map-marker" style="color:green; font-size:16px;"></i>  Visited<br>
