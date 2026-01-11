@@ -444,7 +444,7 @@ elif action == "Map View":
                 border:2px solid black; z-index:9999; font-size:12px;
                 background-color: white; opacity: 0.9;
                 padding: 0px; border-radius: 5px; color: black;">
-        <details open>
+        <details >
             <summary style="cursor: pointer; padding: 5px; font-weight: bold; background-color: #eee;">
                 Legend 🗺️
             </summary>
