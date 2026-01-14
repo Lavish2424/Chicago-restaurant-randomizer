@@ -638,10 +638,10 @@ else:
             if st.button("🎲 Pick Random Place!", type="primary", use_container_width=True):
                 # ANIMATION LOOP (Faster and Longer)
                 placeholder = st.empty()
-                for _ in range(50):
+                for _ in range(75):
                     temp_pick = random.choice(filtered)
                     placeholder.markdown(f"## 🎲 {temp_pick['name']}")
-                    time.sleep(0.05)
+                    time.sleep(0.01)
                 placeholder.empty()
                 picked = random.choice(filtered)
                 st.session_state.last_pick = picked
