@@ -30,12 +30,12 @@ def get_lat_lon(address):
         clean_addr = address.strip()
         if not clean_addr:
             return None, None
-       
+      
         if "chicago" not in clean_addr.lower() and "il" not in clean_addr.lower():
             search_query = f"{clean_addr}, Chicago, IL"
         else:
             search_query = clean_addr
-       
+      
         # Retry logic for timeouts/rate limits
         for attempt in range(3):
             try:
@@ -65,7 +65,7 @@ def load_data():
             place.setdefault("images", [])
             place.setdefault("latitude", None)
             place.setdefault("longitude", None)
-       
+      
             normalized = []
             for rev in place.get("reviews", []):
                 if rev:
@@ -130,7 +130,7 @@ def delete_restaurant(index):
     if "id" in r:
         supabase.table("restaurants").delete().eq("id", r["id"]).execute()
     del restaurants[index]
-    st.session_state.success_message = f"{r['name']} deleted!"  # Set message in session state
+    st.session_state.success_message = f"{r['name']} deleted!" # Set message in session state
     st.rerun()
 def toggle_favorite(idx):
     restaurants[idx]["favorite"] = not restaurants[idx].get("favorite", False)
@@ -168,7 +168,6 @@ if "restaurants" not in st.session_state:
 restaurants = st.session_state.restaurants
 st.markdown("<h1 style='text-align: center;'>🍽️🍸 Chicago Restaurant/Bar Randomizer</h1>", unsafe_allow_html=True)
 st.markdown("<p style='text-align: center;'>Add, view, and randomly pick Chicago eats & drinks!</p>", unsafe_allow_html=True)
-
 # Display success message if set (custom green banner at bottom)
 if "success_message" in st.session_state:
     message = st.session_state.success_message
@@ -189,7 +188,6 @@ if "success_message" in st.session_state:
         unsafe_allow_html=True
     )
     del st.session_state.success_message
-
 st.sidebar.header("Actions")
 action = st.sidebar.radio("What do you want to do?", ["View All Places", "Map View", "Add a Place", "Random Pick"])
 # Clear session state on tab change
@@ -220,7 +218,7 @@ if action == "View All Places":
         with col_sort:
             sort_option = st.selectbox(
                 "Sort by",
-                ["A-Z (Name)", "Favorites First", "Recently Added", "Oldest First"]
+                ["A-Z (Name)", "Favorites First", "Recently Added", "Oldest First", "Not Visited First"]
             )
         filtered = restaurants.copy()
         if search_term:
@@ -237,9 +235,12 @@ if action == "View All Places":
             sorted_places = sorted(filtered, key=lambda x: x.get("id", 0), reverse=True)
         elif sort_option == "Oldest First":
             sorted_places = sorted(filtered, key=lambda x: x.get("id", 0))
+        elif sort_option == "Not Visited First":
+            sorted_places = sorted([r for r in filtered if not r.get("visited")], key=lambda x: x["name"].lower()) + \
+                            sorted([r for r in filtered if r.get("visited")], key=lambda x: x["name"].lower())
         else:
             sorted_places = filtered
-       
+      
         for idx, r in enumerate(sorted_places):
             global_idx = restaurants.index(r)
             icon = " 🍸" if r.get("type") == "cocktail_bar" else " 🍽️"
@@ -248,7 +249,7 @@ if action == "View All Places":
             visited_date_str = f" (visited {r['visited_date']})" if r.get("visited") and r.get("visited_date") else ""
             img_count = f" • {len(r.get('images', []))} photo{'s' if len(r.get('images', [])) > 1 else ''}" if r.get("images") else ""
             notes_count = f" • {len(r['reviews'])} note{'s' if len(r['reviews']) != 1 else ''}" if r["reviews"] else ""
-       
+      
             with st.expander(f"{r['name']}{icon}{fav}{visited}{visited_date_str} • {r['cuisine']} • {r['price']} • {r['location']}{img_count}{notes_count}",
                              expanded=(f"edit_mode_{global_idx}" in st.session_state)):
                 if f"edit_mode_{global_idx}" not in st.session_state:
@@ -307,7 +308,7 @@ if action == "View All Places":
                     st.subheader(f"Editing: {r['name']}")
                     images_to_delete_key = f"images_to_delete_{global_idx}"
                     reviews_key = f"edit_reviews_{global_idx}"
-       
+      
                     edit_name = st.text_input("Name", value=r["name"], key=f"edit_name_{global_idx}")
                     edit_cuisine = st.selectbox("Cuisine/Style", CUISINES, index=CUISINES.index(r["cuisine"]) if r["cuisine"] in CUISINES else 0, key=f"edit_cuisine_{global_idx}")
                     edit_price = st.selectbox("Price", ["$", "$$", "$$$", "$$$$"], index=["$", "$$", "$$$", "$$$$"].index(r["price"]), key=f"edit_price_{global_idx}")
@@ -331,10 +332,10 @@ if action == "View All Places":
                         key=f"edit_visited_date_{global_idx}"
                     )
                     visited_date_edit = edit_visited_date if edit_visited_date is not None else None
-       
+      
                     st.markdown("### Add more photos")
                     new_images = st.file_uploader("Upload additional photos", type=["png", "jpg", "jpeg", "webp"], accept_multiple_files=True, key=f"edit_images_{global_idx}")
-       
+      
                     if r.get("images"):
                         st.markdown("### Current photos")
                         if images_to_delete_key not in st.session_state:
@@ -345,12 +346,12 @@ if action == "View All Places":
                                 st.image(img_url, use_column_width=True)
                                 if st.checkbox("Delete this photo", key=f"del_img_{global_idx}_{i}"):
                                     st.session_state[images_to_delete_key].add(img_url)
-       
+      
                     st.markdown("### Notes")
                     if reviews_key not in st.session_state:
                         st.session_state[reviews_key] = r["reviews"][:]
                     current_reviews = st.session_state[reviews_key]
-       
+      
                     for rev_idx, note in enumerate(current_reviews):
                         col1, col2 = st.columns([8, 1])
                         with col1:
@@ -369,7 +370,7 @@ if action == "View All Places":
                                 st.rerun()
                         if new_note != note:
                             st.session_state[reviews_key][rev_idx] = new_note
-       
+      
                     st.markdown("**Add a new note**")
                     new_note_text = st.text_area("New note (optional)", height=100, key=f"new_note_{global_idx}")
                     if new_note_text.strip():
@@ -378,7 +379,7 @@ if action == "View All Places":
                             st.rerun()
                     if not current_reviews:
                         st.info("No notes yet.")
-       
+      
                     col_save, col_cancel = st.columns(2)
                     with col_save:
                         if st.button("💾 Save Changes", type="primary", use_container_width=True, key=f"save_{global_idx}"):
@@ -402,7 +403,7 @@ if action == "View All Places":
                                         pass
                             updated_date_str = visited_date_edit.strftime("%B %d, %Y") if visited_date_edit else None
                             cleaned_reviews = [n.strip() for n in st.session_state.get(reviews_key, r["reviews"]) if n and n.strip()]
-       
+      
                             # RE-GEOCODE ON EDIT
                             new_lat, new_lon = r.get("latitude"), r.get("longitude")
                             if edit_address.strip() != r["address"]:
@@ -433,7 +434,7 @@ if action == "View All Places":
                                 del st.session_state[images_to_delete_key]
                             if reviews_key in st.session_state:
                                 del st.session_state[reviews_key]
-                            st.session_state.success_message = "Changes saved!"  # Set message in session state
+                            st.session_state.success_message = "Changes saved!" # Set message in session state
                             st.rerun()
                     with col_cancel:
                         if st.button("❌ Cancel", use_container_width=True, key=f"cancel_{global_idx}"):
@@ -446,19 +447,19 @@ if action == "View All Places":
 # ────────────────────────────── Map View ──────────────────────────────
 elif action == "Map View":
     st.header("Chicago Food Map 🗺️")
-   
+  
     # 1. Base Map (Using "OpenStreetMap" for full color)
     m = folium.Map(location=[41.8781, -87.6298], zoom_start=12, tiles="OpenStreetMap")
-   
+  
     # 2. Add Native "Locate Me" Button (Stable)
     LocateControl(
         auto_start=False,
         strings={"title": "Show me where I am", "popup": "You are here!"}
     ).add_to(m)
-   
+  
     # 3. Add Clustering
     marker_cluster = MarkerCluster().add_to(m)
-   
+  
     # 4. Add Floating Collapsible Legend (HTML)
     legend_html = '''
     <div style="position: fixed;
@@ -490,10 +491,10 @@ elif action == "Map View":
         lon = r.get("longitude")
         if lat is not None and lon is not None:
             places_mapped += 1
-       
+      
             # Logic for Colors
             color = "green" if r.get("visited") else "gray"
-       
+      
             # Logic for Icons
             if r["type"] == "cocktail_bar":
                 icon_name = "glass"
@@ -501,12 +502,12 @@ elif action == "Map View":
             else:
                 icon_name = "cutlery"
                 icon_prefix = "glyphicon"
-       
+      
             # Photo Popup
             image_html = ""
             if r.get("images"):
                 image_html = f'<img src="{r["images"][0]}" style="width:100%; height:120px; object-fit:cover; border-radius:5px; margin-bottom:8px;">'
-       
+      
             html = f"""
             <div style="font-family: sans-serif; width: 200px;">
                 {image_html}
@@ -516,7 +517,7 @@ elif action == "Map View":
                 <a href="{google_maps_link(r.get('address',''), r['name'])}" target="_blank">Open in Google Maps</a>
             </div>
             """
-       
+      
             folium.Marker(
                 [lat, lon],
                 popup=folium.Popup(html, max_width=250),
@@ -528,7 +529,7 @@ elif action == "Map View":
     st.caption(f"Showing {places_mapped} location(s).")
     if places_skipped > 0:
         st.caption(f"({places_skipped} places hidden due to missing address coordinates)")
-   
+  
     st_folium(m, width="100%", height=600)
 # ────────────────────────────── Add a Place ──────────────────────────────
 elif action == "Add a Place":
@@ -540,14 +541,11 @@ elif action == "Add a Place":
     address = st.text_input("Address*")
     place_type = st.selectbox("Type*", ["restaurant", "cocktail_bar"],
                               format_func=lambda x: "Restaurant 🍽️" if x=="restaurant" else "Cocktail Bar 🍸")
- 
     visited = st.checkbox("✅ I've already visited this place")
     default_date = date.today() if visited else None
     visited_date = st.date_input("Date Visited", value=default_date) if visited else None
- 
     uploaded_images = st.file_uploader("Upload photos", type=["png", "jpg", "jpeg", "webp"], accept_multiple_files=True)
     quick_notes = st.text_area("Quick notes (optional)", height=100)
- 
     if st.button("Add Place", type="primary"):
         if not all([name.strip(), address.strip()]):
             st.error("Name and address required")
@@ -558,7 +556,7 @@ elif action == "Add a Place":
             lat, lon = None, None
             with st.spinner(f"Locating '{address}'..."):
                 lat, lon = get_lat_lon(address.strip())
-       
+      
             if lat is None:
                 st.warning("⚠️ Could not find specific coordinates for this address. It will save, but won't appear on the map pin.")
             else:
@@ -567,10 +565,10 @@ elif action == "Add a Place":
             if uploaded_images:
                 with st.spinner("Uploading images..."):
                     image_urls = upload_images_to_supabase(uploaded_images, name)
-     
+    
             visited_date_str = visited_date.strftime("%B %d, %Y") if visited_date else None
             new_reviews = [quick_notes.strip()] if quick_notes.strip() else []
-     
+    
             new = {
                 "name": name.strip(),
                 "cuisine": cuisine,
@@ -586,12 +584,12 @@ elif action == "Add a Place":
                 "latitude": lat,
                 "longitude": lon
             }
-     
+    
             try:
                 inserted = save_data([new]) # Pass as list for insert
                 if inserted:
                     restaurants.append(inserted)
-                    st.session_state.success_message = f"{name} added successfully!"  # Set message in session state
+                    st.session_state.success_message = f"{name} added successfully!" # Set message in session state
                     st.rerun()
                 else:
                     st.error("Failed to add place.")
@@ -622,7 +620,7 @@ else:
                 st.write("")
                 st.write("")
                 only_fav = st.checkbox("❤️ Favorites only")
-   
+  
         filtered = [r for r in restaurants
                     if (not only_fav or r.get("favorite"))
                     and (type_filter == "all" or r.get("type") == type_filter)
@@ -632,7 +630,7 @@ else:
                     and (visited_filter == "All" or
                          (visited_filter == "Visited Only" and r.get("visited")) or
                          (visited_filter == "Not Visited Yet" and not r.get("visited")))]
-   
+  
         st.caption(f"**{len(filtered)} places** match your filters")
         if not filtered:
             st.warning("No matches – try broader filters!")
@@ -648,7 +646,7 @@ else:
                 picked = random.choice(filtered)
                 st.session_state.last_pick = picked
                 st.rerun()
-       
+      
             if "last_pick" in st.session_state:
                 c = st.session_state.last_pick
                 if c in filtered:
