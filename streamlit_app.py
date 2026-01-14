@@ -212,9 +212,11 @@ if action == "View All Places":
     if not restaurants:
         st.info("No places added yet.")
     else:
-        col_search, col_sort = st.columns([5, 3])
+        col_search, col_visited, col_sort = st.columns([4, 2, 2])
         with col_search:
             search_term = st.text_input("🔍 Search name, cuisine, neighborhood, address", key="search_input")
+        with col_visited:
+            visited_filter = st.selectbox("Visited", VISITED_OPTIONS, key="view_visited_filter")
         with col_sort:
             sort_option = st.selectbox(
                 "Sort by",
@@ -226,6 +228,10 @@ if action == "View All Places":
             filtered = [r for r in filtered if lower in r["name"].lower() or
                         lower in r["cuisine"].lower() or lower in r["location"].lower() or
                         lower in r.get("address", "").lower()]
+        filtered = [r for r in filtered if 
+                    visited_filter == "All" or
+                    (visited_filter == "Visited Only" and r.get("visited")) or
+                    (visited_filter == "Not Visited Yet" and not r.get("visited"))]
         if sort_option == "A-Z (Name)":
             sorted_places = sorted(filtered, key=lambda x: x["name"].lower())
         elif sort_option == "Favorites First":
