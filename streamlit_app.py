@@ -320,7 +320,7 @@ if action == "View All Places":
                                              index=0 if r["type"] == "restaurant" else 1,
                                              format_func=lambda x: "Restaurant 🍽️" if x=="restaurant" else "Cocktail Bar 🍸",
                                              key=f"edit_type_{global_idx}")
-                    edit_retired = st.checkbox("Retired?", value=r.get("retired", False), key=f"edit_retired_{global_idx}")  # New checkbox for edit
+                    edit_retired = st.checkbox("😔Retired?", value=r.get("retired", False), key=f"edit_retired_{global_idx}")  # New checkbox for edit
                     edit_visited = st.checkbox("✅ I've already visited this place", value=r.get("visited", False), key=f"edit_visited_{global_idx}")
                     existing_date = None
                     if r.get("visited_date"):
