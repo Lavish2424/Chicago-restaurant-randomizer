@@ -320,7 +320,7 @@ if action == "View All Places":
                                              index=0 if r["type"] == "restaurant" else 1,
                                              format_func=lambda x: "Restaurant 🍽️" if x=="restaurant" else "Cocktail Bar 🍸",
                                              key=f"edit_type_{global_idx}")
-                    edit_retired = st.checkbox("😔Retired?", value=r.get("retired", False), key=f"edit_retired_{global_idx}")  # New checkbox for edit
+                    edit_retired = st.checkbox("😔 Retired?", value=r.get("retired", False), key=f"edit_retired_{global_idx}")  # New checkbox for edit
                     edit_visited = st.checkbox("✅ I've already visited this place", value=r.get("visited", False), key=f"edit_visited_{global_idx}")
                     existing_date = None
                     if r.get("visited_date"):
@@ -548,7 +548,7 @@ elif action == "Add a Place":
     address = st.text_input("Address*")
     place_type = st.selectbox("Type*", ["restaurant", "cocktail_bar"],
                               format_func=lambda x: "Restaurant 🍽️" if x=="restaurant" else "Cocktail Bar 🍸")
-    retired = st.checkbox("Retired?", False)  # New checkbox for add
+    retired = st.checkbox("😔 Retired?", False)  # New checkbox for add
     visited = st.checkbox("✅ I've already visited this place")
     default_date = date.today() if visited else None
     visited_date = st.date_input("Date Visited", value=default_date) if visited else None
@@ -629,7 +629,7 @@ else:
                 only_fav = st.checkbox("❤️ Favorites only")  # Restored checkbox
             c7, c8, c9 = st.columns(3)
             with c7:
-                include_retired = st.checkbox("Include Retired?", False)  # New filter checkbox
+                include_retired = st.checkbox("😔 Include Retired?", False)  # New filter checkbox
             with c8:
                 pass  # Empty for now
             with c9:
