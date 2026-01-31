@@ -104,6 +104,8 @@ def save_data(data):
                 "retired": place.get("retired", False), # New field
                 "created_at": place.get("created_at") # New field for updates
             }
+            if update_data["created_at"] is None:
+                del update_data["created_at"]  # Remove if None to allow DB default for inserts; for updates, it won't override existing values
             if place_id:
                 supabase.table("restaurants").update(update_data).eq("id", place_id).execute()
             else:
