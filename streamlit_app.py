@@ -29,12 +29,12 @@ def get_lat_lon(address):
         clean_addr = address.strip()
         if not clean_addr:
             return None, None
-     
+    
         if "chicago" not in clean_addr.lower() and "il" not in clean_addr.lower():
             search_query = f"{clean_addr}, Chicago, IL"
         else:
             search_query = clean_addr
-     
+    
         # Retry logic for timeouts/rate limits
         for attempt in range(3):
             try:
@@ -64,8 +64,9 @@ def load_data():
             place.setdefault("images", [])
             place.setdefault("latitude", None)
             place.setdefault("longitude", None)
-            place.setdefault("retired", False)  # New field default
-     
+            place.setdefault("retired", False) # New field default
+            place.setdefault("created_at", None) # New created_at default
+    
             normalized = []
             for rev in place.get("reviews", []):
                 if rev:
@@ -100,7 +101,8 @@ def save_data(data):
                 "images": place.get("images", []),
                 "latitude": place.get("latitude"),
                 "longitude": place.get("longitude"),
-                "retired": place.get("retired", False)  # New field
+                "retired": place.get("retired", False), # New field
+                "created_at": place.get("created_at") # New field for updates
             }
             if place_id:
                 supabase.table("restaurants").update(update_data).eq("id", place_id).execute()
@@ -233,25 +235,32 @@ if action == "View All Places":
             sorted_places = sorted([r for r in filtered if r.get("favorite")], key=lambda x: x["name"].lower()) + \
                             sorted([r for r in filtered if not r.get("favorite")], key=lambda x: x["name"].lower())
         elif sort_option == "Recently Added":
-            sorted_places = sorted(filtered, key=lambda x: x.get("id", 0), reverse=True)
+            sorted_places = sorted(
+                filtered,
+                key=lambda x: datetime.fromisoformat(x.get("created_at", "1900-01-01T00:00:00Z").rstrip('Z')) if x.get("created_at") else datetime.min,
+                reverse=True
+            )
         elif sort_option == "Oldest First":
-            sorted_places = sorted(filtered, key=lambda x: x.get("id", 0))
+            sorted_places = sorted(
+                filtered,
+                key=lambda x: datetime.fromisoformat(x.get("created_at", "1900-01-01T00:00:00Z").rstrip('Z')) if x.get("created_at") else datetime.min
+            )
         elif sort_option == "Not Visited First":
             sorted_places = sorted([r for r in filtered if not r.get("visited")], key=lambda x: x["name"].lower()) + \
                             sorted([r for r in filtered if r.get("visited")], key=lambda x: x["name"].lower())
         else:
             sorted_places = filtered
-     
+    
         for idx, r in enumerate(sorted_places):
             global_idx = restaurants.index(r)
             icon = " 🍸" if r.get("type") == "cocktail_bar" else " 🍽️"
             fav = " ❤️" if r.get("favorite") else ""
             visited = " ✅" if r.get("visited") else ""
             visited_date_str = f" (visited {r['visited_date']})" if r.get("visited") and r.get("visited_date") else ""
-            retired_str = " (Retired)" if r.get("retired", False) else ""  # New indicator
+            retired_str = " (Retired)" if r.get("retired", False) else "" # New indicator
             img_count = f" • {len(r.get('images', []))} photo{'s' if len(r.get('images', [])) > 1 else ''}" if r.get("images") else ""
             notes_count = f" • {len(r['reviews'])} note{'s' if len(r['reviews']) != 1 else ''}" if r["reviews"] else ""
-     
+    
             with st.expander(f"{r['name']}{icon}{fav}{visited}{visited_date_str}{retired_str} • {r['cuisine']} • {r['price']} • {r['location']}{img_count}{notes_count}",
                              expanded=(f"edit_mode_{global_idx}" in st.session_state)):
                 if f"edit_mode_{global_idx}" not in st.session_state:
@@ -310,7 +319,7 @@ if action == "View All Places":
                     st.subheader(f"Editing: {r['name']}")
                     images_to_delete_key = f"images_to_delete_{global_idx}"
                     reviews_key = f"edit_reviews_{global_idx}"
-     
+    
                     edit_name = st.text_input("Name", value=r["name"], key=f"edit_name_{global_idx}")
                     edit_cuisine = st.selectbox("Cuisine/Style", CUISINES, index=CUISINES.index(r["cuisine"]) if r["cuisine"] in CUISINES else 0, key=f"edit_cuisine_{global_idx}")
                     edit_price = st.selectbox("Price", ["$", "$$", "$$$", "$$$$"], index=["$", "$$", "$$$", "$$$$"].index(r["price"]), key=f"edit_price_{global_idx}")
@@ -320,7 +329,7 @@ if action == "View All Places":
                                              index=0 if r["type"] == "restaurant" else 1,
                                              format_func=lambda x: "Restaurant 🍽️" if x=="restaurant" else "Cocktail Bar 🍸",
                                              key=f"edit_type_{global_idx}")
-                    edit_retired = st.checkbox("😔 Retired?", value=r.get("retired", False), key=f"edit_retired_{global_idx}")  # New checkbox for edit
+                    edit_retired = st.checkbox("😔 Retired?", value=r.get("retired", False), key=f"edit_retired_{global_idx}") # New checkbox for edit
                     edit_visited = st.checkbox("✅ I've already visited this place", value=r.get("visited", False), key=f"edit_visited_{global_idx}")
                     existing_date = None
                     if r.get("visited_date"):
@@ -335,10 +344,10 @@ if action == "View All Places":
                         key=f"edit_visited_date_{global_idx}"
                     )
                     visited_date_edit = edit_visited_date if edit_visited_date is not None else None
-     
+    
                     st.markdown("### Add more photos")
                     new_images = st.file_uploader("Upload additional photos", type=["png", "jpg", "jpeg", "webp"], accept_multiple_files=True, key=f"edit_images_{global_idx}")
-     
+    
                     if r.get("images"):
                         st.markdown("### Current photos")
                         if images_to_delete_key not in st.session_state:
@@ -349,12 +358,12 @@ if action == "View All Places":
                                 st.image(img_url, use_column_width=True)
                                 if st.checkbox("Delete this photo", key=f"del_img_{global_idx}_{i}"):
                                     st.session_state[images_to_delete_key].add(img_url)
-     
+    
                     st.markdown("### Notes")
                     if reviews_key not in st.session_state:
                         st.session_state[reviews_key] = r["reviews"][:]
                     current_reviews = st.session_state[reviews_key]
-     
+    
                     for rev_idx, note in enumerate(current_reviews):
                         col1, col2 = st.columns([8, 1])
                         with col1:
@@ -373,7 +382,7 @@ if action == "View All Places":
                                 st.rerun()
                         if new_note != note:
                             st.session_state[reviews_key][rev_idx] = new_note
-     
+    
                     st.markdown("**Add a new note**")
                     new_note_text = st.text_area("New note (optional)", height=100, key=f"new_note_{global_idx}")
                     if new_note_text.strip():
@@ -382,7 +391,7 @@ if action == "View All Places":
                             st.rerun()
                     if not current_reviews:
                         st.info("No notes yet.")
-     
+    
                     col_save, col_cancel = st.columns(2)
                     with col_save:
                         if st.button("💾 Save Changes", type="primary", use_container_width=True, key=f"save_{global_idx}"):
@@ -406,7 +415,7 @@ if action == "View All Places":
                                         pass
                             updated_date_str = visited_date_edit.strftime("%B %d, %Y") if visited_date_edit else None
                             cleaned_reviews = [n.strip() for n in st.session_state.get(reviews_key, r["reviews"]) if n and n.strip()]
-     
+    
                             # RE-GEOCODE ON EDIT
                             new_lat, new_lon = r.get("latitude"), r.get("longitude")
                             if edit_address.strip() != r["address"]:
@@ -430,7 +439,7 @@ if action == "View All Places":
                                 "reviews": cleaned_reviews,
                                 "latitude": new_lat,
                                 "longitude": new_lon,
-                                "retired": edit_retired  # New field update
+                                "retired": edit_retired # New field update
                             })
                             save_data([restaurants[global_idx]])
                             del st.session_state[f"edit_mode_{global_idx}"]
@@ -451,19 +460,15 @@ if action == "View All Places":
 # ────────────────────────────── Map View ──────────────────────────────
 elif action == "Map View":
     st.header("Chicago Food Map 🗺️")
- 
     # 1. Base Map (Using "OpenStreetMap" for full color)
     m = folium.Map(location=[41.8781, -87.6298], zoom_start=12, tiles="OpenStreetMap")
- 
     # 2. Add Native "Locate Me" Button (Stable)
     LocateControl(
         auto_start=False,
         strings={"title": "Show me where I am", "popup": "You are here!"}
     ).add_to(m)
- 
     # 3. Add Clustering
     marker_cluster = MarkerCluster().add_to(m)
- 
     # 4. Add Floating Collapsible Legend (HTML)
     legend_html = '''
     <div style="position: fixed;
@@ -491,17 +496,17 @@ elif action == "Map View":
     places_mapped = 0
     places_skipped = 0
     for r in restaurants:
-        if r.get("retired", False):  # Skip retired by default
+        if r.get("retired", False): # Skip retired by default
             places_skipped += 1
             continue
         lat = r.get("latitude")
         lon = r.get("longitude")
         if lat is not None and lon is not None:
             places_mapped += 1
-     
+    
             # Logic for Colors
             color = "green" if r.get("visited") else "gray"
-     
+    
             # Logic for Icons
             if r["type"] == "cocktail_bar":
                 icon_name = "glass"
@@ -509,12 +514,12 @@ elif action == "Map View":
             else:
                 icon_name = "cutlery"
                 icon_prefix = "glyphicon"
-     
+    
             # Photo Popup
             image_html = ""
             if r.get("images"):
                 image_html = f'<img src="{r["images"][0]}" style="width:100%; height:120px; object-fit:cover; border-radius:5px; margin-bottom:8px;">'
-     
+    
             html = f"""
             <div style="font-family: sans-serif; width: 200px;">
                 {image_html}
@@ -524,7 +529,7 @@ elif action == "Map View":
                 <a href="{google_maps_link(r.get('address',''), r['name'])}" target="_blank">Open in Google Maps</a>
             </div>
             """
-     
+    
             folium.Marker(
                 [lat, lon],
                 popup=folium.Popup(html, max_width=250),
@@ -536,7 +541,6 @@ elif action == "Map View":
     st.caption(f"Showing {places_mapped} location(s).")
     if places_skipped > 0:
         st.caption(f"({places_skipped} places hidden due to missing address coordinates or retired status)")
- 
     st_folium(m, width="100%", height=600)
 # ────────────────────────────── Add a Place ──────────────────────────────
 elif action == "Add a Place":
@@ -548,7 +552,7 @@ elif action == "Add a Place":
     address = st.text_input("Address*")
     place_type = st.selectbox("Type*", ["restaurant", "cocktail_bar"],
                               format_func=lambda x: "Restaurant 🍽️" if x=="restaurant" else "Cocktail Bar 🍸")
-    retired = st.checkbox("😔 Retired?", False)  # New checkbox for add
+    retired = st.checkbox("😔 Retired?", False) # New checkbox for add
     visited = st.checkbox("✅ I've already visited this place")
     default_date = date.today() if visited else None
     visited_date = st.date_input("Date Visited", value=default_date) if visited else None
@@ -564,7 +568,7 @@ elif action == "Add a Place":
             lat, lon = None, None
             with st.spinner(f"Locating '{address}'..."):
                 lat, lon = get_lat_lon(address.strip())
-     
+    
             if lat is None:
                 st.warning("⚠️ Could not find specific coordinates for this address. It will save, but won't appear on the map pin.")
             else:
@@ -573,10 +577,10 @@ elif action == "Add a Place":
             if uploaded_images:
                 with st.spinner("Uploading images..."):
                     image_urls = upload_images_to_supabase(uploaded_images, name)
-   
+  
             visited_date_str = visited_date.strftime("%B %d, %Y") if visited_date else None
             new_reviews = [quick_notes.strip()] if quick_notes.strip() else []
-   
+  
             new = {
                 "name": name.strip(),
                 "cuisine": cuisine,
@@ -591,9 +595,9 @@ elif action == "Add a Place":
                 "images": image_urls,
                 "latitude": lat,
                 "longitude": lon,
-                "retired": retired  # New field
+                "retired": retired # New field
             }
-   
+  
             try:
                 inserted = save_data([new]) # Pass as list for insert
                 if inserted:
@@ -626,15 +630,14 @@ else:
             with c5:
                 visited_filter = st.selectbox("Visited Status", VISITED_OPTIONS)
             with c6:
-                pass  # Empty for now
+                pass # Empty for now
             c7, c8, c9 = st.columns(3)
             with c7:
-                include_retired = st.checkbox("😔 Include Retired?", False)  # New filter checkbox
+                include_retired = st.checkbox("😔 Include Retired?", False) # New filter checkbox
             with c8:
-                only_fav = st.checkbox("❤️ Favorites only")  # Restored checkbox
+                only_fav = st.checkbox("❤️ Favorites only") # Restored checkbox
             with c9:
-                pass  # Empty for now
- 
+                pass # Empty for now
         filtered = [r for r in restaurants
                     if (not only_fav or r.get("favorite"))
                     and (type_filter == "all" or r.get("type") == type_filter)
@@ -644,8 +647,7 @@ else:
                     and (visited_filter == "All" or
                          (visited_filter == "Visited Only" and r.get("visited")) or
                          (visited_filter == "Not Visited Yet" and not r.get("visited")))
-                    and (include_retired or not r.get("retired", False))]  # New retired filter
- 
+                    and (include_retired or not r.get("retired", False))] # New retired filter
         st.caption(f"**{len(filtered)} places** match your filters")
         if not filtered:
             st.warning("No matches – try broader filters!")
@@ -661,7 +663,7 @@ else:
                 picked = random.choice(filtered)
                 st.session_state.last_pick = picked
                 st.rerun()
-     
+    
             if "last_pick" in st.session_state:
                 c = st.session_state.last_pick
                 if c in filtered:
@@ -671,7 +673,7 @@ else:
                         fav = " ❤️" if c.get("favorite") else ""
                         vis = " ✅ Visited" if c.get("visited") else ""
                         vis_date = f" ({c.get('visited_date')})" if c.get("visited_date") else ""
-                        retired_str = " (Retired)" if c.get("retired", False) else ""  # New indicator
+                        retired_str = " (Retired)" if c.get("retired", False) else "" # New indicator
                         st.markdown(f"# {c['name']}{tag}{fav}{vis}{vis_date}{retired_str}")
                         st.markdown(f"**{c['cuisine']} • {c['price']} • {c['location']}**")
                         idx = restaurants.index(c)
