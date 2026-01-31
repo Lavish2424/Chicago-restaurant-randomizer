@@ -626,12 +626,12 @@ else:
             with c5:
                 visited_filter = st.selectbox("Visited Status", VISITED_OPTIONS)
             with c6:
-                only_fav = st.checkbox("❤️ Favorites only")  # Restored checkbox
+                pass  # Empty for now
             c7, c8, c9 = st.columns(3)
             with c7:
                 include_retired = st.checkbox("😔 Include Retired?", False)  # New filter checkbox
             with c8:
-                pass  # Empty for now
+                only_fav = st.checkbox("❤️ Favorites only")  # Restored checkbox
             with c9:
                 pass  # Empty for now
  
