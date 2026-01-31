@@ -239,13 +239,13 @@ if action == "View All Places":
         elif sort_option == "Recently Added":
             sorted_places = sorted(
                 filtered,
-                key=lambda x: datetime.fromisoformat(x.get("created_at", "1900-01-01T00:00:00Z").rstrip('Z')) if x.get("created_at") else datetime.min,
+                key=lambda x: datetime.fromisoformat(x.get("created_at", "1900-01-01T00:00:00")).replace(tzinfo=None) if x.get("created_at") else datetime.min,
                 reverse=True
             )
         elif sort_option == "Oldest First":
             sorted_places = sorted(
                 filtered,
-                key=lambda x: datetime.fromisoformat(x.get("created_at", "1900-01-01T00:00:00Z").rstrip('Z')) if x.get("created_at") else datetime.min
+                key=lambda x: datetime.fromisoformat(x.get("created_at", "1900-01-01T00:00:00")).replace(tzinfo=None) if x.get("created_at") else datetime.min
             )
         elif sort_option == "Not Visited First":
             sorted_places = sorted([r for r in filtered if not r.get("visited")], key=lambda x: x["name"].lower()) + \
