@@ -132,39 +132,40 @@ def save_data(data):
 def delete_restaurant(index):
     r = restaurants[index]
     
-    # 1. DELETE FILES FROM STORAGE BUCKET
+    # 1. DELETE THE ACTUAL FILES FROM STORAGE BUCKET
     if r.get("images"):
         paths_to_delete = []
         for url in r["images"]:
             try:
-                parsed = urllib.parse.urlparse(url)
-                # This extracts the actual file path inside the bucket
-                full_path = parsed.path.lstrip('/')
-                prefix = f"storage/v1/object/public/{BUCKET_NAME}/"
-                if full_path.startswith(prefix):
-                    file_path = full_path[len(prefix):]
+                # We need to turn the full URL into just the 'folder/file.jpg' path
+                # Example URL: https://xyz.supabase.co/storage/v1/object/public/restaurant-images/Tacos/pic.jpg
+                # We need: Tacos/pic.jpg
+                if BUCKET_NAME in url:
+                    # Split the URL by the bucket name and take everything after it
+                    file_path = url.split(f"{BUCKET_NAME}/")[-1]
                     paths_to_delete.append(file_path)
             except Exception as e:
-                st.warning(f"Error parsing image URL for deletion: {e}")
+                st.warning(f"Could not figure out storage path for: {url}")
 
         if paths_to_delete:
             try:
-                # Tell Supabase to remove the actual files
+                # This actually removes the files from the 'Storage' tab in Supabase
                 supabase.storage.from_(BUCKET_NAME).remove(paths_to_delete)
             except Exception as e:
-                st.error(f"Failed to delete files from storage: {str(e)}")
+                st.error(f"Storage cleanup failed: {e}")
 
     # 2. DELETE THE ROW FROM THE DATABASE TABLE
+    # This is what makes it disappear from your app (and stay gone after reboot)
     if "id" in r:
         try:
             supabase.table("restaurants").delete().eq("id", r["id"]).execute()
         except Exception as e:
-            st.error(f"Failed to delete database record: {e}")
-            return # Stop here if DB delete failed
+            st.error(f"Database delete failed: {e}")
+            return 
 
-    # 3. CLEAN UP LOCAL APP STATE
+    # 3. REFRESH APP
     del restaurants[index]
-    st.session_state.success_message = f"{r['name']} deleted from everywhere!"
+    st.session_state.success_message = f"Removed {r['name']} and its photos."
     st.rerun()
 
 
