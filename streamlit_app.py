@@ -131,35 +131,40 @@ def save_data(data):
 
 def delete_restaurant(index):
     r = restaurants[index]
+    
+    # 1. DELETE FILES FROM STORAGE BUCKET
     if r.get("images"):
         paths_to_delete = []
         for url in r["images"]:
             try:
                 parsed = urllib.parse.urlparse(url)
+                # This extracts the actual file path inside the bucket
                 full_path = parsed.path.lstrip('/')
                 prefix = f"storage/v1/object/public/{BUCKET_NAME}/"
                 if full_path.startswith(prefix):
                     file_path = full_path[len(prefix):]
                     paths_to_delete.append(file_path)
-                else:
-                    st.warning(f"Could not parse storage path from: {url}")
             except Exception as e:
-                st.warning(f"Error parsing image URL {url}: {e}")
+                st.warning(f"Error parsing image URL for deletion: {e}")
 
         if paths_to_delete:
             try:
-                response = supabase.storage.from_(BUCKET_NAME).remove(paths_to_delete)
-                # st.write("Deleted items:", response) # Debugging
-                if not response: # Supabase storage remove sometimes returns empty list on success or error depending on version
-                     pass 
+                # Tell Supabase to remove the actual files
+                supabase.storage.from_(BUCKET_NAME).remove(paths_to_delete)
             except Exception as e:
                 st.error(f"Failed to delete files from storage: {str(e)}")
 
+    # 2. DELETE THE ROW FROM THE DATABASE TABLE
     if "id" in r:
-        supabase.table("restaurants").delete().eq("id", r["id"]).execute()
+        try:
+            supabase.table("restaurants").delete().eq("id", r["id"]).execute()
+        except Exception as e:
+            st.error(f"Failed to delete database record: {e}")
+            return # Stop here if DB delete failed
 
+    # 3. CLEAN UP LOCAL APP STATE
     del restaurants[index]
-    st.session_state.success_message = f"{r['name']} deleted!"
+    st.session_state.success_message = f"{r['name']} deleted from everywhere!"
     st.rerun()
 
 
