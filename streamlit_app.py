@@ -687,7 +687,12 @@ elif action == "Add a Place":
     visited = st.checkbox("✅ I've already visited this place")
     default_date = date.today() if visited else None
     visited_date = st.date_input("Date Visited", value=default_date) if visited else None
-    uploaded_images = st.file_uploader("Upload photos", type=["png", "jpg", "jpeg", "webp"], accept_multiple_files=True)
+    uploaded_images = st.file_uploader(
+    "Upload photos", 
+    type=["png", "jpg", "jpeg", "webp"], 
+    accept_multiple_files=True,
+    capture="camera"  # This is the 'Hack' that triggers the camera option on mobile
+)
     quick_notes = st.text_area("Quick notes (optional)", height=100)
 
     if st.button("Add Place", type="primary"):
