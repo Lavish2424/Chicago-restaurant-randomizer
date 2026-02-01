@@ -149,11 +149,18 @@ def delete_restaurant(index):
 
         if paths_to_delete:
             try:
-                # This actually removes the files from the 'Storage' tab in Supabase
+                # 1. Try deleting the calculated paths
                 supabase.storage.from_(BUCKET_NAME).remove(paths_to_delete)
             except Exception as e:
-                st.error(f"Storage cleanup failed: {e}")
-
+                # 2. If that fails, try a 'lazy' search for the filename 
+                # (This helps fix old entries with broken paths)
+                for path in paths_to_delete:
+                    try:
+                        filename = path.split('/')[-1]
+                        # Look for the file in the root if it's not in the folder
+                        supabase.storage.from_(BUCKET_NAME).remove([filename])
+                    except:
+                        pass
     # 2. DELETE THE ROW FROM THE DATABASE TABLE
     # This is what makes it disappear from your app (and stay gone after reboot)
     if "id" in r:
