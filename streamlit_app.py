@@ -149,15 +149,9 @@ def delete_restaurant(index):
         if paths_to_delete:
             try:
                 response = supabase.storage.from_(BUCKET_NAME).remove(paths_to_delete)
-                st.write("Delete response:", response)          # ← add this
-                st.write("Deleted items:", response.data)       # should show list of deleted paths if successful
-                if response.error:
-                    st.error(f"Delete error: {response.error}")
-                if not response.data:
-                    st.warning("Delete call returned successfully but no files were removed. "
-                               "Check bucket RLS policies for DELETE permission on storage.objects.")
-                else:
-                    st.success(f"Deleted {len(response.data)} file(s) from storage.")
+                # st.write("Deleted items:", response) # Debugging
+                if not response: # Supabase storage remove sometimes returns empty list on success or error depending on version
+                     pass 
             except Exception as e:
                 st.error(f"Failed to delete files from storage: {str(e)}")
 
@@ -186,6 +180,7 @@ def google_maps_link(address, name=""):
     return f"https://www.google.com/maps/search/?api=1&query={urllib.parse.quote(query)}"
 
 
+# REPLACED FUNCTION: Now handles resizing and compression
 def upload_images_to_supabase(uploaded_files, restaurant_name):
     urls = []
     # Sanitize name for the file path
@@ -305,7 +300,8 @@ NEIGHBORHOODS = [
     "South Loop",
     "West Loop",
     "West Town",
-    "Wicker Park"]
+    "Wicker Park"
+]
 CUISINES = [
     "American", 
     "Asian", 
