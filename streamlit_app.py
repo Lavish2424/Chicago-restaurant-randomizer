@@ -1,5 +1,3 @@
-from PIL import Image, ExifTags, ImageOps  # Standard library for image processing
-import io
 import streamlit as st
 import random
 import urllib.parse
@@ -11,6 +9,8 @@ import folium
 from geopy.geocoders import ArcGIS
 import time
 from folium.plugins import LocateControl, MarkerCluster
+from PIL import Image, ExifTags, ImageOps  # ADDED: For image resizing/fixing
+import io  # ADDED: For handling image byte streams
 
 # ==================== SUPABASE SETUP ====================
 try:
