@@ -269,6 +269,7 @@ NEIGHBORHOODS = [
     "Logan Square",
     "Near North Side",
     "Oakbrook",
+    "OakLawn",
     "Pilsen",
     "River North",
     "South Loop",
