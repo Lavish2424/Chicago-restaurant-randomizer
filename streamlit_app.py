@@ -260,10 +260,38 @@ if st.session_state.previous_action != action:
         del st.session_state.last_pick
     st.session_state.previous_action = action
 
-NEIGHBORHOODS = ["Fulton Market", "River North", "Gold Coast", "South Loop", "Chinatown", "Pilsen",
-                 "West Town", "West Loop", "Lincoln Park", "Wicker Park", "Near North Side", "Berwyn", "Logan Square"]
-CUISINES = ["American", "Asian", "Mexican", "Japanese", "Italian", "Indian", "Thai", "French",
-            "Seafood", "Steakhouse", "Cocktails", "Chinese", "Mediterranean", "Other"]
+NEIGHBORHOODS = [
+    "Berwyn",
+    "Chinatown",
+    "Fulton Market",
+    "Gold Coast",
+    "Lincoln Park",
+    "Logan Square",
+    "Near North Side",
+    "Oakbrook",
+    "Pilsen",
+    "River North",
+    "South Loop",
+    "West Loop",
+    "West Town",
+    "Wicker Park"]
+CUISINES = [
+    "American", 
+    "Asian", 
+    "Chinese", 
+    "Cocktails", 
+    "French", 
+    "Indian", 
+    "Italian", 
+    "Japanese", 
+    "Mediterranean", 
+    "Mexican", 
+    "Other", 
+    "Seafood", 
+    "Spanish", 
+    "Steakhouse", 
+    "Thai"
+]
 VISITED_OPTIONS = ["All", "Visited Only", "Not Visited Yet"]
 
 # ────────────────────────────── View All Places ──────────────────────────────
