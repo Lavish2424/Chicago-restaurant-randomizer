@@ -147,6 +147,10 @@ def delete_restaurant(index):
         if paths_to_delete:
             try:
                 response = supabase.storage.from_(BUCKET_NAME).remove(paths_to_delete)
+                st.write("Delete response:", response)          # ← add this
+                st.write("Deleted items:", response.data)       # should show list of deleted paths if successful
+                if response.error:
+                    st.error(f"Delete error: {response.error}")
                 if not response.data:
                     st.warning("Delete call returned successfully but no files were removed. "
                                "Check bucket RLS policies for DELETE permission on storage.objects.")
