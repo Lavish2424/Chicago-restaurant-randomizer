@@ -196,29 +196,47 @@ def google_maps_link(address, name=""):
 # REPLACED FUNCTION: Now handles resizing and compression
 def upload_images_to_supabase(uploaded_files, restaurant_name):
     urls = []
+    # Sanitize name for the file path
     sanitized_name = "".join(c for c in restaurant_name if c.isalnum() or c in " -_").rstrip()
 
-    # Supported formats for web-safe uploading
-    SUPPORTED_EXTENSIONS = [".jpg", ".jpeg", ".png", ".webp"]
-
     for i, file in enumerate(uploaded_files):
-        file_ext = os.path.splitext(file.name)[1].lower()
-        
-        # FIX: Explicit format validation
-        if file_ext not in SUPPORTED_EXTENSIONS:
-            st.error(f"❌ File '{file.name}' is not supported. Please use JPG or PNG.")
-            st.info("💡 Pixel users: If selecting from Google Photos, ensure the photo is downloaded to your device first.")
+        # 1. PROCESS THE IMAGE (Resize & Compress)
+        try:
+            image = Image.open(file)
+            
+            # Fix orientation (handle EXIF rotation common in phone photos)
+            image = ImageOps.exif_transpose(image)
+            
+            # Convert to RGB (in case of PNG/RGBA) to allow JPEG saving
+            if image.mode in ("RGBA", "P"):
+                image = image.convert("RGB")
+
+            # Resize if too large (max width/height 1200px)
+            max_size = (1200, 1200)
+            image.thumbnail(max_size, Image.Resampling.LANCZOS)
+
+            # Save to a byte buffer as optimized JPEG
+            output_buffer = io.BytesIO()
+            image.save(output_buffer, format="JPEG", quality=80, optimize=True)
+            file_data = output_buffer.getvalue()
+            
+            # Force extension to .jpg since we converted it
+            filename = f"{sanitized_name}_{i}_{int(time.time())}.jpg"
+            mime_type = "image/jpeg"
+
+        except Exception as e:
+            st.error(f"Error processing image {file.name}: {e}")
             continue
 
-        filename = f"{sanitized_name}_{i}{file_ext}"
         file_path = f"{sanitized_name}/{filename}"
 
+        # 2. UPLOAD TO SUPABASE
         for attempt in range(3):
             try:
                 supabase.storage.from_(BUCKET_NAME).upload(
                     path=file_path,
-                    file=file.getvalue(),
-                    file_options={"content-type": file.type, "upsert": "true"}
+                    file=file_data,  # Use our compressed data, not the original file
+                    file_options={"content-type": mime_type, "upsert": "true"}
                 )
                 public_url = supabase.storage.from_(BUCKET_NAME).get_public_url(file_path)
                 urls.append(public_url)
@@ -226,9 +244,11 @@ def upload_images_to_supabase(uploaded_files, restaurant_name):
                 break
             except Exception as e:
                 if attempt == 2:
-                    st.error(f"Failed to upload {file.name} after 3 attempts: {str(e)}")
+                    st.error(f"Failed to upload {file.name} after 3 attempts: {type(e).__name__} – {str(e)}")
                 else:
                     time.sleep(1.5 * (attempt + 1))
+                    st.info(f"Retrying upload for {file.name} (attempt {attempt+2}/3)...")
+
     return urls
 
 
@@ -667,12 +687,7 @@ elif action == "Add a Place":
     visited = st.checkbox("✅ I've already visited this place")
     default_date = date.today() if visited else None
     visited_date = st.date_input("Date Visited", value=default_date) if visited else None
-    uploaded_images = st.file_uploader(
-    "Upload photos", 
-    type=["png", "jpg", "jpeg", "webp"], 
-    accept_multiple_files=True,
-    capture="camera"  # This is the 'Hack' that triggers the camera option on mobile
-)
+    uploaded_images = st.file_uploader("Upload photos", type=["png", "jpg", "jpeg", "webp"], accept_multiple_files=True)
     quick_notes = st.text_area("Quick notes (optional)", height=100)
 
     if st.button("Add Place", type="primary"):
