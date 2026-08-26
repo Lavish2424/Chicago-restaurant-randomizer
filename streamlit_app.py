@@ -157,7 +157,7 @@ button[kind="primary"]:hover, [data-testid="stBaseButton-primary"]:hover {
     background: linear-gradient(180deg, var(--ledger) 0%, var(--ledger-light) 100%);
     border: 1px solid var(--hairline);
     border-radius: 10px;
-    padding: 1.6rem 1.75rem 1.1rem;
+    padding: 1.6rem 1.75rem 1.1rem 2.1rem;
     margin-bottom: 0.5rem;
     overflow: hidden;
 }
@@ -191,25 +191,48 @@ button[kind="primary"]:hover, [data-testid="stBaseButton-primary"]:hover {
     padding: 0.5rem 0;
 }
 
-@keyframes ticketIn {
-    0% { opacity: 0; transform: translateY(6px) scale(0.985); }
-    100% { opacity: 1; transform: translateY(0) scale(1); }
+@keyframes ticketDrop {
+    0% { opacity: 0; transform: translateY(-20px) rotate(0deg) scale(0.96); }
+    60% { opacity: 1; transform: translateY(4px) rotate(-2.6deg) scale(1.02); }
+    100% { opacity: 1; transform: translateY(0) rotate(-1.4deg) scale(1); }
 }
-@keyframes shimmerSweep {
-    0% { transform: translateX(-130%) skewX(-20deg); }
-    100% { transform: translateX(230%) skewX(-20deg); }
+@keyframes stampDown {
+    0% { opacity: 0; transform: rotate(-14deg) scale(2.4); }
+    70% { opacity: 0.95; transform: rotate(-14deg) scale(0.9); }
+    100% { opacity: 0.92; transform: rotate(-14deg) scale(1); }
 }
-.ticket { animation: ticketIn 0.45s ease-out; }
+.ticket {
+    animation: ticketDrop 0.55s cubic-bezier(.34, 1.56, .64, 1) both;
+    box-shadow: 0 14px 28px rgba(0, 0, 0, 0.5);
+    overflow: visible;
+}
+/* torn perforation along the left edge, as if pulled from a ticket book */
 .ticket::after {
     content: "";
     position: absolute;
-    top: 0;
-    left: 0;
-    width: 35%;
-    height: 100%;
-    background: linear-gradient(120deg, transparent 0%, rgba(227, 192, 102, 0.35) 50%, transparent 100%);
-    animation: shimmerSweep 1.1s ease-out 0.2s 1;
-    pointer-events: none;
+    top: -3px; bottom: -3px; left: -3px;
+    width: 17px;
+    background-image:
+        linear-gradient(135deg, var(--ink) 8px, transparent 8.5px),
+        linear-gradient(225deg, var(--ink) 8px, transparent 8.5px);
+    background-size: 17px 17px;
+    background-repeat: repeat-y;
+    background-position: left top;
+}
+.ticket-stamp {
+    position: absolute;
+    top: 16px;
+    right: 20px;
+    padding: 0.4rem 1rem;
+    border: 3px double var(--wine);
+    border-radius: 50%;
+    color: var(--wine-bright);
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 0.68rem;
+    font-weight: 500;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    animation: stampDown 0.4s cubic-bezier(.2, 1.6, .4, 1) 0.4s both;
 }
 
 /* ---------- Misc ---------- */
@@ -987,6 +1010,7 @@ else:
                             <div class="ticket">
                                 <div class="ticket-eyebrow">Tonight's Pick</div>
                                 <h1>{c['name']}</h1>
+                                <div class="ticket-stamp">Selected</div>
                             </div>
                             """,
                             unsafe_allow_html=True,
