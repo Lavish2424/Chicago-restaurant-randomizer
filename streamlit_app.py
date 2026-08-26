@@ -11,6 +11,201 @@ import time
 from folium.plugins import LocateControl, MarkerCluster
 from PIL import Image, ExifTags, ImageOps  # ADDED: For image resizing/fixing
 import io  # ADDED: For handling image byte streams
+
+# ==================== PAGE CONFIG (must be first Streamlit call) ====================
+st.set_page_config(
+    page_title="Chicago Eats & Drinks",
+    page_icon="🥃",
+    layout="wide",
+    initial_sidebar_state="expanded",
+)
+
+# ==================== VISUAL IDENTITY ====================
+# Vintage supper-club / marquee-sign direction: ink-black rooms, brass marquee
+# lettering, a wine accent for favorites, and ticket-stub styling for entries.
+CUSTOM_CSS = """
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,600;9..144,700&family=Work+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap');
+
+:root {
+    --ink: #1B1712;
+    --ledger: #241F18;
+    --ledger-light: #2E271D;
+    --brass: #C9A034;
+    --brass-bright: #E3C066;
+    --wine: #8B2A3B;
+    --wine-bright: #E8A6B4;
+    --cream: #F1E9D8;
+    --smoke: #A79A85;
+    --green: #6B8863;
+    --hairline: rgba(201, 160, 52, 0.28);
+}
+
+html, body, [data-testid="stAppViewContainer"], .main {
+    background-color: var(--ink) !important;
+    color: var(--cream) !important;
+    font-family: 'Work Sans', sans-serif;
+}
+[data-testid="stHeader"] { background-color: transparent !important; }
+
+[data-testid="stSidebar"] {
+    background-color: var(--ledger) !important;
+    border-right: 1px solid var(--hairline);
+}
+[data-testid="stSidebar"] * { color: var(--cream) !important; }
+[data-testid="stSidebar"] h1, [data-testid="stSidebar"] h2, [data-testid="stSidebar"] h3 {
+    font-family: 'Fraunces', serif !important;
+}
+
+h1, h2, h3 {
+    font-family: 'Fraunces', serif !important;
+    color: var(--brass-bright) !important;
+    letter-spacing: 0.01em;
+}
+
+/* ---------- Hero marquee ---------- */
+.marquee-hero {
+    text-align: center;
+    padding: 1.5rem 1rem 1.35rem;
+    border-bottom: 1px solid var(--hairline);
+    margin-bottom: 1.75rem;
+}
+.marquee-hero h1 {
+    font-family: 'Fraunces', serif !important;
+    font-size: 2.6rem;
+    font-weight: 700;
+    color: var(--brass-bright) !important;
+    margin: 0;
+    text-shadow: 0 0 26px rgba(227, 192, 102, 0.28);
+}
+.marquee-hero p {
+    font-family: 'IBM Plex Mono', monospace;
+    color: var(--smoke);
+    letter-spacing: 0.22em;
+    text-transform: uppercase;
+    font-size: 0.7rem;
+    margin-top: 0.55rem;
+}
+
+/* ---------- Buttons ---------- */
+.stButton > button,
+[data-testid="stBaseButton-primary"],
+[data-testid="stBaseButton-secondary"] {
+    font-family: 'Work Sans', sans-serif !important;
+    background-color: var(--ledger-light) !important;
+    color: var(--cream) !important;
+    border: 1px solid var(--hairline) !important;
+    border-radius: 4px !important;
+    transition: border-color 0.15s ease, color 0.15s ease;
+}
+.stButton > button:hover { border-color: var(--brass) !important; color: var(--brass-bright) !important; }
+button[kind="primary"], [data-testid="stBaseButton-primary"] {
+    background-color: var(--brass) !important;
+    color: var(--ink) !important;
+    font-weight: 600 !important;
+    border: none !important;
+}
+button[kind="primary"]:hover, [data-testid="stBaseButton-primary"]:hover {
+    background-color: var(--brass-bright) !important;
+    color: var(--ink) !important;
+}
+
+/* ---------- Expander -> ticket stub ---------- */
+[data-testid="stExpander"] {
+    background-color: var(--ledger) !important;
+    border: 1px solid var(--hairline) !important;
+    border-left: 3px dashed var(--brass) !important;
+    border-radius: 6px !important;
+    margin-bottom: 0.6rem;
+}
+[data-testid="stExpander"] summary { font-family: 'Fraunces', serif !important; font-size: 1.05rem; }
+[data-testid="stExpander"] summary:hover { color: var(--brass-bright) !important; }
+
+/* ---------- Inputs ---------- */
+[data-testid="stTextInput"] input,
+[data-testid="stTextArea"] textarea,
+[data-baseweb="select"] > div,
+[data-testid="stDateInput"] input {
+    background-color: var(--ledger-light) !important;
+    color: var(--cream) !important;
+    border: 1px solid var(--hairline) !important;
+    border-radius: 4px !important;
+    font-family: 'Work Sans', sans-serif !important;
+}
+
+/* ---------- Badges ---------- */
+.badge-row { display: flex; flex-wrap: wrap; gap: 0.4rem; margin: 0.4rem 0 1rem; }
+.badge {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 0.72rem;
+    letter-spacing: 0.02em;
+    padding: 0.22rem 0.62rem;
+    border-radius: 999px;
+    border: 1px solid var(--hairline);
+    color: var(--cream);
+    background-color: var(--ledger-light);
+    white-space: nowrap;
+}
+.badge-type { border-color: var(--brass); color: var(--brass-bright); }
+.badge-fav { border-color: var(--wine); color: var(--wine-bright); background-color: rgba(139, 42, 59, 0.18); }
+.badge-visited { border-color: var(--green); color: #C3D6BC; background-color: rgba(107, 136, 99, 0.18); }
+.badge-retired { border-color: var(--smoke); color: var(--smoke); }
+
+/* ---------- Random-pick ticket ---------- */
+.ticket {
+    position: relative;
+    background: linear-gradient(180deg, var(--ledger) 0%, var(--ledger-light) 100%);
+    border: 1px solid var(--hairline);
+    border-radius: 10px;
+    padding: 1.6rem 1.75rem 1.1rem;
+    margin-bottom: 0.5rem;
+    overflow: hidden;
+}
+.ticket::before {
+    content: "";
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    height: 4px;
+    background-image: linear-gradient(90deg, var(--brass) 50%, transparent 50%);
+    background-size: 14px 4px;
+}
+.ticket-eyebrow {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 0.7rem;
+    letter-spacing: 0.28em;
+    text-transform: uppercase;
+    color: var(--brass);
+}
+.ticket h1 {
+    font-family: 'Fraunces', serif !important;
+    font-size: 2.05rem;
+    margin: 0.3rem 0 0 !important;
+    color: var(--brass-bright) !important;
+}
+
+.spin-frame {
+    text-align: center;
+    font-family: 'Fraunces', serif;
+    font-size: 1.9rem;
+    color: var(--brass-bright);
+    padding: 0.5rem 0;
+}
+
+/* ---------- Misc ---------- */
+#success-banner {
+    font-family: 'Work Sans', sans-serif;
+    background-color: var(--brass) !important;
+    color: var(--ink) !important;
+    font-weight: 600;
+    border: none !important;
+}
+hr { border-color: var(--hairline) !important; }
+[data-testid="stCaptionContainer"], .stCaption, small { color: var(--smoke) !important; }
+[data-testid="stImage"] img { border-radius: 6px; border: 1px solid var(--hairline); }
+</style>
+"""
+st.markdown(CUSTOM_CSS, unsafe_allow_html=True)
+
 # ==================== SUPABASE SETUP ====================
 try:
     supabase_url = st.secrets["SUPABASE_URL"]
@@ -169,6 +364,32 @@ def toggle_visited(idx):
 def google_maps_link(address, name=""):
     query = f"{name}, {address}" if name else address
     return f"https://www.google.com/maps/search/?api=1&query={urllib.parse.quote(query)}"
+
+# ---------- Visual helpers ----------
+def badge_html(text, kind=""):
+    cls = f"badge {kind}".strip()
+    return f'<span class="{cls}">{text}</span>'
+
+def render_badges(r):
+    """Renders a tidy pill row (cuisine / price / neighborhood / type / status) for a place."""
+    parts = [
+        badge_html(r["cuisine"]),
+        badge_html(r["price"]),
+        badge_html(r["location"]),
+        badge_html("Cocktail Bar" if r.get("type") == "cocktail_bar" else "Restaurant", "badge-type"),
+    ]
+    if r.get("favorite"):
+        parts.append(badge_html("♥ Favorite", "badge-fav"))
+    if r.get("visited"):
+        vis_label = "Visited" + (f" · {r['visited_date']}" if r.get("visited_date") else "")
+        parts.append(badge_html(vis_label, "badge-visited"))
+    if r.get("retired", False):
+        parts.append(badge_html("Retired", "badge-retired"))
+    st.markdown(f'<div class="badge-row">{"".join(parts)}</div>', unsafe_allow_html=True)
+
+def spin_frame(name):
+    return f'<div class="spin-frame">🎲 &nbsp;{name}</div>'
+
 # REPLACED FUNCTION: Now handles resizing and compression
 def upload_images_to_supabase(uploaded_files, restaurant_name):
     urls = []
@@ -223,8 +444,16 @@ def upload_images_to_supabase(uploaded_files, restaurant_name):
 if "restaurants" not in st.session_state:
     st.session_state.restaurants = load_data()
 restaurants = st.session_state.restaurants
-st.markdown("<h1 style='text-align: center;'>🍽️🍸 Chicago Restaurant/Bar Randomizer</h1>", unsafe_allow_html=True)
-st.markdown("<p style='text-align: center;'>Add, view, and randomly pick Chicago eats & drinks!</p>", unsafe_allow_html=True)
+
+st.markdown(
+    """
+    <div class="marquee-hero">
+        <h1>Chicago Eats &amp; Drinks</h1>
+        <p>Restaurants · Cocktail Bars · Pick Your Next Spot</p>
+    </div>
+    """,
+    unsafe_allow_html=True,
+)
 # Success banner
 if "success_message" in st.session_state:
     message = st.session_state.success_message
@@ -246,7 +475,10 @@ if "success_message" in st.session_state:
     )
     del st.session_state.success_message
 st.sidebar.header("Actions")
-action = st.sidebar.radio("What do you want to do?", ["View All Places", "Map View", "Add a Place", "Random Pick"])
+action = st.sidebar.radio(
+    "What do you want to do?",
+    ["📖 View All Places", "🗺️ Map View", "➕ Add a Place", "🎲 Random Pick"],
+)
 st.sidebar.markdown("---")
 st.sidebar.caption("Built by Alan, made for us ❤️")
 # Clear session state on action change
@@ -295,7 +527,7 @@ CUISINES = [
 ]
 VISITED_OPTIONS = ["All", "Visited Only", "Not Visited Yet"]
 # ────────────────────────────── View All Places ──────────────────────────────
-if action == "View All Places":
+if action == "📖 View All Places":
     st.header("All Places 👀")
     st.caption(f"{len(restaurants)} place(s)")
     if not restaurants:
@@ -374,7 +606,7 @@ if action == "View All Places":
                         if st.button("Cancel Delete", key=f"can_{global_idx}", use_container_width=True):
                             del st.session_state[delete_key]
                             st.rerun()
-                    st.markdown("---")
+                    render_badges(r)
                     col_addr, col_map = st.columns([3, 1])
                     with col_addr:
                         st.write(f"**📍 Address:** {r.get('address', 'Not provided')}")
@@ -541,22 +773,23 @@ if action == "View All Places":
                                 del st.session_state[reviews_key]
                             st.rerun()
 # ────────────────────────────── Map View ──────────────────────────────
-elif action == "Map View":
+elif action == "🗺️ Map View":
     st.header("Chicago Food Map 🗺️")
-    m = folium.Map(location=[41.8781, -87.6298], zoom_start=12, tiles="OpenStreetMap")
+    m = folium.Map(location=[41.8781, -87.6298], zoom_start=12, tiles="CartoDB dark_matter")
     LocateControl(auto_start=False, strings={"title": "Show me where I am", "popup": "You are here!"}).add_to(m)
     marker_cluster = MarkerCluster().add_to(m)
     legend_html = '''
-    <div style="position: fixed; top: 10px; right: 10px; width: 120px; height: auto; max-height: 300px; overflow-y: auto;
-                border: 2px solid black; z-index: 9999; font-size: 12px; background-color: white; opacity: 0.9;
-                padding: 0px; border-radius: 5px; color: black;">
+    <div style="position: fixed; top: 10px; right: 10px; width: 130px; height: auto; max-height: 300px; overflow-y: auto;
+                border: 1px solid #C9A034; z-index: 9999; font-size: 12px; font-family: 'Work Sans', sans-serif;
+                background-color: #241F18; opacity: 0.95;
+                padding: 0px; border-radius: 6px; color: #F1E9D8;">
         <details>
-            <summary style="cursor: pointer; padding: 5px; font-weight: bold; background-color: #eee;">Legend 🗺️</summary>
-            <div style="padding: 5px;">
-                <i class="fa fa-map-marker" style="color:blue; font-size:14px;"></i> You<br>
-                <i class="fa fa-map-marker" style="color:green; font-size:14px;"></i> Visited<br>
-                <i class="fa fa-map-marker" style="color:gray; font-size:14px;"></i> Not Visited<br>
-                <hr style="margin: 5px 0;">
+            <summary style="cursor: pointer; padding: 6px 8px; font-weight: 600; background-color: #2E271D; color: #E3C066; border-radius: 6px 6px 0 0;">Legend 🗺️</summary>
+            <div style="padding: 8px;">
+                <i class="fa fa-map-marker" style="color:#5B9BD5; font-size:14px;"></i> You<br>
+                <i class="fa fa-map-marker" style="color:#6B8863; font-size:14px;"></i> Visited<br>
+                <i class="fa fa-map-marker" style="color:#A79A85; font-size:14px;"></i> Not Visited<br>
+                <hr style="margin: 5px 0; border-color: rgba(201,160,52,0.3);">
                 🍽️ Restaurant<br>
                 🍸 Cocktail Bar
             </div>
@@ -574,19 +807,19 @@ elif action == "Map View":
         lon = r.get("longitude")
         if lat is not None and lon is not None:
             places_mapped += 1
-            color = "green" if r.get("visited") else "gray"
+            color = "green" if r.get("visited") else "lightgray"
             icon_name = "glass" if r["type"] == "cocktail_bar" else "cutlery"
             icon_prefix = "glyphicon"
             image_html = ""
             if r.get("images"):
                 image_html = f'<img src="{r["images"][0]}" style="width:100%; height:120px; object-fit:cover; border-radius:5px; margin-bottom:8px;">'
             html = f"""
-            <div style="font-family: sans-serif; width: 200px;">
+            <div style="font-family: 'Work Sans', sans-serif; width: 200px; background-color: #241F18; color: #F1E9D8; padding: 6px; border-radius: 6px;">
                 {image_html}
-                <h4>{r['name']}</h4>
-                <p><b>{r['cuisine']}</b> • {r['price']}</p>
-                <p>{r['location']}</p>
-                <a href="{google_maps_link(r.get('address',''), r['name'])}" target="_blank">Open in Google Maps</a>
+                <h4 style="font-family: 'Fraunces', serif; color: #E3C066; margin: 4px 0;">{r['name']}</h4>
+                <p style="margin: 2px 0;"><b>{r['cuisine']}</b> • {r['price']}</p>
+                <p style="margin: 2px 0; color: #A79A85;">{r['location']}</p>
+                <a href="{google_maps_link(r.get('address',''), r['name'])}" target="_blank" style="color: #E3C066;">Open in Google Maps</a>
             </div>
             """
             folium.Marker(
@@ -602,7 +835,7 @@ elif action == "Map View":
         st.caption(f"({places_skipped} places hidden due to missing coordinates or retired status)")
     st_folium(m, width="100%", height=600)
 # ────────────────────────────── Add a Place ──────────────────────────────
-elif action == "Add a Place":
+elif action == "➕ Add a Place":
     st.header("Add a New Place 📍")
     name = st.text_input("Name*")
     cuisine = st.selectbox("Cuisine/Style*", CUISINES)
@@ -709,7 +942,7 @@ else:
                 placeholder = st.empty()
                 for _ in range(500):
                     temp_pick = random.choice(filtered)
-                    placeholder.markdown(f"## 🎲 {temp_pick['name']}")
+                    placeholder.markdown(spin_frame(temp_pick['name']), unsafe_allow_html=True)
                     time.sleep(0.01)
                 placeholder.empty()
                 picked = random.choice(filtered)
@@ -720,13 +953,16 @@ else:
                 if c in filtered:
                     st.markdown("---")
                     with st.container(border=True):
-                        tag = " 🍸 Cocktail Bar" if c.get("type") == "cocktail_bar" else " 🍽️ Restaurant"
-                        fav = " ❤️" if c.get("favorite") else ""
-                        vis = " ✅ Visited" if c.get("visited") else ""
-                        vis_date = f" ({c.get('visited_date')})" if c.get("visited_date") else ""
-                        retired_str = " (Retired)" if c.get("retired", False) else ""
-                        st.markdown(f"# {c['name']}{tag}{fav}{vis}{vis_date}{retired_str}")
-                        st.markdown(f"**{c['cuisine']} • {c['price']} • {c['location']}**")
+                        st.markdown(
+                            f"""
+                            <div class="ticket">
+                                <div class="ticket-eyebrow">Tonight's Pick</div>
+                                <h1>{c['name']}</h1>
+                            </div>
+                            """,
+                            unsafe_allow_html=True,
+                        )
+                        render_badges(c)
                         idx = restaurants.index(c)
                         col_fav, col_vis = st.columns(2)
                         with col_fav:
@@ -759,7 +995,7 @@ else:
                             placeholder = st.empty()
                             for _ in range(50):
                                 temp_pick = random.choice(filtered)
-                                placeholder.markdown(f"## 🎲 {temp_pick['name']}")
+                                placeholder.markdown(spin_frame(temp_pick['name']), unsafe_allow_html=True)
                                 time.sleep(0.05)
                             placeholder.empty()
                             picked = random.choice(filtered)
