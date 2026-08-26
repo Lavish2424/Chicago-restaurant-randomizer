@@ -1,1 +1,23 @@
+name: Keep Supabase awake
 
+on:
+  schedule:
+    - cron: "0 14 * * *"   # daily 2pm UTC (9am Chicago)
+  workflow_dispatch:
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Query restaurants table
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
+        run: |
+          code=$(curl -s -o /tmp/sb.json -w "%{http_code}" \
+            "$SUPABASE_URL/rest/v1/restaurants?select=id&limit=1" \
+            -H "apikey: $SUPABASE_ANON_KEY" \
+            -H "Authorization: Bearer $SUPABASE_ANON_KEY")
+          echo "HTTP $code"
+          cat /tmp/sb.json
+          test "$code" -eq 200
