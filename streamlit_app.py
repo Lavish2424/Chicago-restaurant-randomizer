@@ -725,7 +725,7 @@ if action == "📖 View All Places":
                     )
                     visited_date_edit = edit_visited_date if edit_visited_date is not None else None
                     st.markdown("### Add more photos")
-                    new_images = st.file_uploader("Upload additional photos", type=["png", "jpg", "jpeg", "webp"],
+                    new_images = st.file_uploader("Upload additional photos",
                                                   accept_multiple_files=True, key=f"edit_images_{global_idx}")
                     if r.get("images"):
                         st.markdown("### Current photos")
@@ -904,7 +904,7 @@ elif action == "➕ Add a Place":
     visited = st.checkbox("✅ I've already visited this place")
     default_date = date.today() if visited else None
     visited_date = st.date_input("Date Visited", value=default_date) if visited else None
-    uploaded_images = st.file_uploader("Upload photos", type=["png", "jpg", "jpeg", "webp"], accept_multiple_files=True)
+    uploaded_images = st.file_uploader("Upload photos", accept_multiple_files=True)
     quick_notes = st.text_area("Quick notes (optional)", height=100)
     if st.button("Add Place", type="primary"):
         if not all([name.strip(), address.strip()]):
