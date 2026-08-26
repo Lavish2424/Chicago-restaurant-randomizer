@@ -169,6 +169,11 @@ def toggle_visited(idx):
 def google_maps_link(address, name=""):
     query = f"{name}, {address}" if name else address
     return f"https://www.google.com/maps/search/?api=1&query={urllib.parse.quote(query)}"
+def show_image(url):
+    try:
+        st.image(url, width="stretch")
+    except Exception:
+        st.caption("Photo failed to load")
 # REPLACED FUNCTION: Now handles resizing and compression
 def upload_images_to_supabase(uploaded_files, restaurant_name):
     urls = []
@@ -247,6 +252,10 @@ if "success_message" in st.session_state:
     del st.session_state.success_message
 st.sidebar.header("Actions")
 action = st.sidebar.radio("What do you want to do?", ["View All Places", "Map View", "Add a Place", "Random Pick"])
+if st.sidebar.button("🔄 Refresh list", use_container_width=True):
+    st.session_state.pop("restaurants", None)
+    st.session_state.pop("last_pick", None)
+    st.rerun()
 st.sidebar.markdown("---")
 st.sidebar.caption("Built by Alan, made for us ❤️")
 # Clear session state on action change
@@ -399,7 +408,7 @@ if action == "View All Places":
                                 idx_img = i + j
                                 if idx_img < num_images:
                                     with cols[j]:
-                                        st.image(r["images"][idx_img], width="stretch")
+                                        show_image(r["images"][idx_img])
                 else:
                     # EDIT MODE
                     st.subheader(f"Editing: {r['name']}")
@@ -446,7 +455,7 @@ if action == "View All Places":
                         cols = st.columns(3)
                         for i, img_url in enumerate(r["images"]):
                             with cols[i % 3]:
-                                st.image(img_url, width="stretch")
+                                show_image(img_url)
                                 if st.checkbox("Delete this photo", key=f"del_img_{global_idx}_{i}"):
                                     st.session_state[images_to_delete_key].add(img_url)
                     st.markdown("### Notes")
@@ -707,10 +716,10 @@ else:
         else:
             if st.button("🎲 Pick Random Place!", type="primary", use_container_width=True):
                 placeholder = st.empty()
-                for _ in range(500):
+                for _ in range(25):
                     temp_pick = random.choice(filtered)
                     placeholder.markdown(f"## 🎲 {temp_pick['name']}")
-                    time.sleep(0.01)
+                    time.sleep(0.03)
                 placeholder.empty()
                 picked = random.choice(filtered)
                 st.session_state.last_pick = picked
@@ -753,14 +762,14 @@ else:
                             cols = st.columns(3)
                             for i, img_url in enumerate(c["images"]):
                                 with cols[i % 3]:
-                                    st.image(img_url, width="stretch")
+                                    show_image(img_url)
                         st.markdown("---")
                         if st.button("🎲 Pick Again (from same filters)", type="secondary", use_container_width=True):
                             placeholder = st.empty()
-                            for _ in range(50):
+                            for _ in range(25):
                                 temp_pick = random.choice(filtered)
                                 placeholder.markdown(f"## 🎲 {temp_pick['name']}")
-                                time.sleep(0.05)
+                                time.sleep(0.03)
                             placeholder.empty()
                             picked = random.choice(filtered)
                             st.session_state.last_pick = picked
