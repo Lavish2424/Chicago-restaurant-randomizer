@@ -191,6 +191,27 @@ button[kind="primary"]:hover, [data-testid="stBaseButton-primary"]:hover {
     padding: 0.5rem 0;
 }
 
+@keyframes ticketIn {
+    0% { opacity: 0; transform: translateY(6px) scale(0.985); }
+    100% { opacity: 1; transform: translateY(0) scale(1); }
+}
+@keyframes shimmerSweep {
+    0% { transform: translateX(-130%) skewX(-20deg); }
+    100% { transform: translateX(230%) skewX(-20deg); }
+}
+.ticket { animation: ticketIn 0.45s ease-out; }
+.ticket::after {
+    content: "";
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 35%;
+    height: 100%;
+    background: linear-gradient(120deg, transparent 0%, rgba(227, 192, 102, 0.35) 50%, transparent 100%);
+    animation: shimmerSweep 1.1s ease-out 0.2s 1;
+    pointer-events: none;
+}
+
 /* ---------- Misc ---------- */
 #success-banner {
     font-family: 'Work Sans', sans-serif;
@@ -389,6 +410,18 @@ def render_badges(r):
 
 def spin_frame(name):
     return f'<div class="spin-frame">🎲 &nbsp;{name}</div>'
+
+# Delay (seconds) between frames, front-loaded fast and slowing toward the end
+# so the draw feels like it's settling on an answer rather than just flickering.
+SPIN_SCHEDULE_MAIN = [0.02] * 10 + [0.03] * 8 + [0.05] * 6 + [0.08] * 5 + [0.12] * 4 + [0.18] * 3
+SPIN_SCHEDULE_AGAIN = [0.02] * 6 + [0.04] * 5 + [0.07] * 4 + [0.11] * 3 + [0.16] * 2
+
+def run_spin(placeholder, choices, schedule):
+    for delay in schedule:
+        temp_pick = random.choice(choices)
+        placeholder.markdown(spin_frame(temp_pick["name"]), unsafe_allow_html=True)
+        time.sleep(delay)
+    placeholder.empty()
 
 # REPLACED FUNCTION: Now handles resizing and compression
 def upload_images_to_supabase(uploaded_files, restaurant_name):
@@ -940,11 +973,7 @@ else:
         else:
             if st.button("🎲 Pick Random Place!", type="primary", use_container_width=True):
                 placeholder = st.empty()
-                for _ in range(500):
-                    temp_pick = random.choice(filtered)
-                    placeholder.markdown(spin_frame(temp_pick['name']), unsafe_allow_html=True)
-                    time.sleep(0.01)
-                placeholder.empty()
+                run_spin(placeholder, filtered, SPIN_SCHEDULE_MAIN)
                 picked = random.choice(filtered)
                 st.session_state.last_pick = picked
                 st.rerun()
@@ -993,11 +1022,7 @@ else:
                         st.markdown("---")
                         if st.button("🎲 Pick Again (from same filters)", type="secondary", use_container_width=True):
                             placeholder = st.empty()
-                            for _ in range(50):
-                                temp_pick = random.choice(filtered)
-                                placeholder.markdown(spin_frame(temp_pick['name']), unsafe_allow_html=True)
-                                time.sleep(0.05)
-                            placeholder.empty()
+                            run_spin(placeholder, filtered, SPIN_SCHEDULE_AGAIN)
                             picked = random.choice(filtered)
                             st.session_state.last_pick = picked
                             st.rerun()
