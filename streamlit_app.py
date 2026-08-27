@@ -531,6 +531,26 @@ if "success_message" in st.session_state:
     )
     del st.session_state.success_message
 st.sidebar.header("Actions")
+
+# ==================== ADMIN LOGIN ====================
+if "is_admin" not in st.session_state:
+    st.session_state.is_admin = False
+
+with st.sidebar.expander("🔓 Admin Mode" if st.session_state.is_admin else "🔒 Admin Login"):
+    if st.session_state.is_admin:
+        st.success("Logged in as admin")
+        if st.button("Log out", key="admin_logout_btn", use_container_width=True):
+            st.session_state.is_admin = False
+            st.rerun()
+    else:
+        admin_pwd = st.text_input("Password", type="password", key="admin_pwd_input")
+        if st.button("Log in", key="admin_login_btn", use_container_width=True):
+            if admin_pwd and admin_pwd == st.secrets.get("APP_PASSWORD", ""):
+                st.session_state.is_admin = True
+                st.rerun()
+            else:
+                st.error("Incorrect password")
+
 action = st.sidebar.radio(
     "What do you want to do?",
     ["📖 View All Places", "🗺️ Map View", "➕ Add a Place", "🎲 Random Pick"],
@@ -638,30 +658,31 @@ if action == "📖 View All Places":
             with st.expander(f"{r['name']}{icon}{fav}{visited}{visited_date_str}{retired_str} • {r['cuisine']} • {r['price']} • {r['location']}{img_count}{notes_count}",
                              expanded=(f"edit_mode_{global_idx}" in st.session_state)):
                 if f"edit_mode_{global_idx}" not in st.session_state:
-                    btn1, btn2, btn3, btn4 = st.columns(4)
-                    with btn1:
-                        if st.button("❤️ Favorite" if not r.get("favorite") else "💔 Unfavorite", key=f"fav_{global_idx}", use_container_width=True):
-                            toggle_favorite(global_idx)
-                    with btn2:
-                        if st.button("✅ Mark Visited" if not r.get("visited") else "❌ Mark Unvisited", key=f"vis_{global_idx}", type="secondary", use_container_width=True):
-                            toggle_visited(global_idx)
-                    with btn3:
-                        if st.button("Edit ✏️", key=f"edit_{global_idx}", use_container_width=True):
-                            st.session_state[f"edit_mode_{global_idx}"] = True
-                            st.rerun()
-                    with btn4:
-                        delete_key = f"del_confirm_{global_idx}"
-                        if delete_key in st.session_state:
-                            if st.button("🗑️ Confirm Delete", type="primary", key=f"conf_{global_idx}", use_container_width=True):
-                                delete_restaurant(global_idx)
-                        else:
-                            if st.button("Delete 🗑️", key=f"del_{global_idx}", use_container_width=True):
-                                st.session_state[delete_key] = True
+                    if st.session_state.is_admin:
+                        btn1, btn2, btn3, btn4 = st.columns(4)
+                        with btn1:
+                            if st.button("❤️ Favorite" if not r.get("favorite") else "💔 Unfavorite", key=f"fav_{global_idx}", use_container_width=True):
+                                toggle_favorite(global_idx)
+                        with btn2:
+                            if st.button("✅ Mark Visited" if not r.get("visited") else "❌ Mark Unvisited", key=f"vis_{global_idx}", type="secondary", use_container_width=True):
+                                toggle_visited(global_idx)
+                        with btn3:
+                            if st.button("Edit ✏️", key=f"edit_{global_idx}", use_container_width=True):
+                                st.session_state[f"edit_mode_{global_idx}"] = True
                                 st.rerun()
-                    if delete_key in st.session_state:
-                        if st.button("Cancel Delete", key=f"can_{global_idx}", use_container_width=True):
-                            del st.session_state[delete_key]
-                            st.rerun()
+                        with btn4:
+                            delete_key = f"del_confirm_{global_idx}"
+                            if delete_key in st.session_state:
+                                if st.button("🗑️ Confirm Delete", type="primary", key=f"conf_{global_idx}", use_container_width=True):
+                                    delete_restaurant(global_idx)
+                            else:
+                                if st.button("Delete 🗑️", key=f"del_{global_idx}", use_container_width=True):
+                                    st.session_state[delete_key] = True
+                                    st.rerun()
+                        if delete_key in st.session_state:
+                            if st.button("Cancel Delete", key=f"can_{global_idx}", use_container_width=True):
+                                del st.session_state[delete_key]
+                                st.rerun()
                     render_badges(r)
                     col_addr, col_map = st.columns([3, 1])
                     with col_addr:
@@ -901,6 +922,9 @@ elif action == "🗺️ Map View":
 # ────────────────────────────── Add a Place ──────────────────────────────
 elif action == "➕ Add a Place":
     st.header("Add a New Place 📍")
+    if not st.session_state.is_admin:
+        st.warning("🔒 Admin login required to add places. Use the Admin Login in the sidebar.")
+        st.stop()
     name = st.text_input("Name*")
     cuisine = st.selectbox("Cuisine/Style*", CUISINES)
     price = st.selectbox("Price*", ["$", "$$", "$$$", "$$$$"])
@@ -1025,15 +1049,16 @@ else:
                         )
                         render_badges(c)
                         idx = restaurants.index(c)
-                        col_fav, col_vis = st.columns(2)
-                        with col_fav:
-                            if st.button("❤️ Unfavorite" if c.get("favorite") else "❤️ Favorite",
-                                         key=f"rand_fav_{idx}", use_container_width=True):
-                                toggle_favorite(idx)
-                        with col_vis:
-                            if st.button("✅ Mark as Unvisited" if c.get("visited") else "✅ Mark as Visited",
-                                         key=f"rand_vis_{idx}", type="secondary", use_container_width=True):
-                                toggle_visited(idx)
+                        if st.session_state.is_admin:
+                            col_fav, col_vis = st.columns(2)
+                            with col_fav:
+                                if st.button("❤️ Unfavorite" if c.get("favorite") else "❤️ Favorite",
+                                             key=f"rand_fav_{idx}", use_container_width=True):
+                                    toggle_favorite(idx)
+                            with col_vis:
+                                if st.button("✅ Mark as Unvisited" if c.get("visited") else "✅ Mark as Visited",
+                                             key=f"rand_vis_{idx}", type="secondary", use_container_width=True):
+                                    toggle_visited(idx)
                         st.markdown("---")
                         st.write(f"📍 **Address:** {c.get('address','')}")
                         st.markdown(f"[🗺️ Open in Google Maps]({google_maps_link(c.get('address',''), c['name'])})", unsafe_allow_html=True)
