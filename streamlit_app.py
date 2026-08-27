@@ -831,6 +831,7 @@ if action == "📖 View All Places":
 # ────────────────────────────── Map View ──────────────────────────────
 elif action == "🗺️ Map View":
     st.header("Chicago Food Map 🗺️")
+    carto_key = st.secrets["CARTO_API_KEY"]
     m = folium.Map(location=[41.8781, -87.6298], zoom_start=12, tiles="CartoDB dark_matter")
     LocateControl(auto_start=False, strings={"title": "Show me where I am", "popup": "You are here!"}).add_to(m)
     marker_cluster = MarkerCluster().add_to(m)
