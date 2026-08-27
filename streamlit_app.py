@@ -356,7 +356,7 @@ def save_data(data):
         return None
 def delete_restaurant(index):
     r = restaurants[index]
-    
+
     # 1. DELETE THE ACTUAL FILES FROM STORAGE BUCKET
     if r.get("images"):
         paths_to_delete = []
@@ -376,7 +376,7 @@ def delete_restaurant(index):
                 # 1. Try deleting the calculated paths
                 supabase.storage.from_(BUCKET_NAME).remove(paths_to_delete)
             except Exception as e:
-                # 2. If that fails, try a 'lazy' search for the filename 
+                # 2. If that fails, try a 'lazy' search for the filename
                 # (This helps fix old entries with broken paths)
                 for path in paths_to_delete:
                     try:
@@ -392,7 +392,7 @@ def delete_restaurant(index):
             supabase.table("restaurants").delete().eq("id", r["id"]).execute()
         except Exception as e:
             st.error(f"Database delete failed: {e}")
-            return 
+            return
     # 3. REFRESH APP
     del restaurants[index]
     st.session_state.success_message = f"Removed {r['name']} and its photos."
@@ -455,10 +455,10 @@ def upload_images_to_supabase(uploaded_files, restaurant_name):
         # 1. PROCESS THE IMAGE (Resize & Compress)
         try:
             image = Image.open(file)
-            
+
             # Fix orientation (handle EXIF rotation common in phone photos)
             image = ImageOps.exif_transpose(image)
-            
+
             # Convert to RGB (in case of PNG/RGBA) to allow JPEG saving
             if image.mode in ("RGBA", "P"):
                 image = image.convert("RGB")
@@ -469,7 +469,7 @@ def upload_images_to_supabase(uploaded_files, restaurant_name):
             output_buffer = io.BytesIO()
             image.save(output_buffer, format="JPEG", quality=80, optimize=True)
             file_data = output_buffer.getvalue()
-            
+
             # Force extension to .jpg since we converted it
             filename = f"{sanitized_name}_{i}_{int(time.time())}.jpg"
             mime_type = "image/jpeg"
@@ -565,20 +565,20 @@ NEIGHBORHOODS = [
     "Wicker Park"
 ]
 CUISINES = [
-    "American", 
-    "Asian", 
-    "Chinese", 
-    "Cocktails", 
-    "French", 
-    "Indian", 
-    "Italian", 
-    "Japanese", 
-    "Mediterranean", 
-    "Mexican", 
-    "Other", 
-    "Seafood", 
-    "Spanish", 
-    "Steakhouse", 
+    "American",
+    "Asian",
+    "Chinese",
+    "Cocktails",
+    "French",
+    "Indian",
+    "Italian",
+    "Japanese",
+    "Mediterranean",
+    "Mexican",
+    "Other",
+    "Seafood",
+    "Spanish",
+    "Steakhouse",
     "Thai"
 ]
 VISITED_OPTIONS = ["All", "Visited Only", "Not Visited Yet"]
@@ -831,8 +831,15 @@ if action == "📖 View All Places":
 # ────────────────────────────── Map View ──────────────────────────────
 elif action == "🗺️ Map View":
     st.header("Chicago Food Map 🗺️")
-    carto_key = st.secrets["CARTO_API_KEY"]
-    m = folium.Map(location=[41.8781, -87.6298], zoom_start=12, tiles="CartoDB dark_matter")
+    carto_key = st.secrets.get("CARTO_API_KEY", "")
+    if carto_key:
+        tile_url = f"https://basemaps.cartocdn.com/rastertiles/dark_all/{{z}}/{{x}}/{{y}}{{r}}.png?key={carto_key}"
+        tile_attr = '© <a href="https://carto.com/attributions">CARTO</a>'
+    else:
+        st.warning("No CARTO_API_KEY found in secrets — falling back to a free basemap without a key.")
+        tile_url = "https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Base/MapServer/tile/{z}/{y}/{x}"
+        tile_attr = "Esri, HERE, Garmin, © OpenStreetMap contributors"
+    m = folium.Map(location=[41.8781, -87.6298], zoom_start=12, tiles=tile_url, attr=tile_attr)
     LocateControl(auto_start=False, strings={"title": "Show me where I am", "popup": "You are here!"}).add_to(m)
     marker_cluster = MarkerCluster().add_to(m)
     legend_html = '''
