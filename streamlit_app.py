@@ -493,25 +493,33 @@ def guess_cuisine_and_type(category_text):
     return cuisine, place_type
 
 
-def lookup_place_by_name(name):
+def lookup_place_by_address(address):
     """
-    Search ArcGIS for a business by name (biased to Chicago) and return whatever
-    we can auto-fill from it: address, coordinates, and a guessed category.
-    Returns None if nothing usable came back — the form just stays manual.
+    Geocode an address via ArcGIS and return whatever we can auto-fill from it:
+    coordinates (for the neighborhood guess) and a category string, if ArcGIS's
+    match happens to be a recognized business listing rather than a bare street
+    address — used to guess cuisine/type. Returns None if geocoding fails.
     """
     try:
         time.sleep(1)  # same throttle guard as get_lat_lon
-        query = f"{name.strip()}, Chicago, IL"
-        location = geolocator.geocode(query, exactly_one=True, out_fields="*")
+        clean_addr = address.strip()
+        if not clean_addr:
+            return None
+        if "chicago" not in clean_addr.lower() and "il" not in clean_addr.lower():
+            search_query = f"{clean_addr}, Chicago, IL"
+        else:
+            search_query = clean_addr
+        location = geolocator.geocode(search_query, exactly_one=True, out_fields="*")
         if not location:
             return None
         raw = location.raw or {}
         attrs = raw.get("attributes", {})
-        # ArcGIS's business-listing candidates carry a category in "Type" or
-        # "PlaceName" depending on the source dataset — check both.
+        # ArcGIS's business-listing matches carry a category in "Type" or
+        # "PlaceName" depending on the source dataset — check both. A plain
+        # street address usually won't have either, and that's fine: we
+        # still get coordinates for the neighborhood guess.
         category = attrs.get("Type") or attrs.get("PlaceName") or ""
         return {
-            "address": location.address,
             "latitude": location.latitude,
             "longitude": location.longitude,
             "category": category,
@@ -679,6 +687,8 @@ if st.session_state.previous_action != action:
         del st.session_state.last_pick
     if "autofill" in st.session_state:
         del st.session_state.autofill
+    if "last_lookup_address" in st.session_state:
+        del st.session_state.last_lookup_address
     st.session_state.previous_action = action
 NEIGHBORHOODS = [
     "Berwyn",
@@ -1039,40 +1049,40 @@ elif action == "➕ Add a Place":
         st.warning("🔒 Admin login required to add places. Use the Admin Login in the sidebar.")
         st.stop()
 
-    # ---------- Smart auto-fill ----------
-    st.caption("Type just the name and we'll try to fill in the rest — always double-check before saving.")
-    lookup_col, btn_col = st.columns([4, 1])
-    with lookup_col:
-        lookup_name = st.text_input("Restaurant or bar name", key="lookup_name",
-                                    placeholder="e.g. Au Cheval")
-    with btn_col:
-        st.write("")  # vertical spacer to align button with input
-        do_lookup = st.button("🔍 Auto-fill", use_container_width=True, disabled=not lookup_name.strip())
-    if do_lookup:
-        with st.spinner(f"Looking up '{lookup_name}'..."):
-            found = lookup_place_by_name(lookup_name)
-        if found and found.get("address"):
+    name = st.text_input("Name*")
+
+    address = st.text_input("Address*", key="add_address",
+                            help="Neighborhood (and cuisine/type, when we can tell) fill in automatically once you enter this.")
+
+    # ---------- Auto-fill triggered by the address ----------
+    # Runs once per distinct address the user types (tracked via last_lookup_address),
+    # not on every keystroke — Streamlit only reruns this when the field loses focus
+    # or the user hits Enter, so this fires right after they finish typing it.
+    clean_address = address.strip()
+    if clean_address and clean_address != st.session_state.get("last_lookup_address"):
+        with st.spinner("Looking up that address..."):
+            found = lookup_place_by_address(clean_address)
+        st.session_state.last_lookup_address = clean_address
+        if found:
             guessed_cuisine, guessed_type = guess_cuisine_and_type(found.get("category"))
             guessed_neighborhood = guess_neighborhood(found["latitude"], found["longitude"])
             st.session_state.autofill = {
-                "name": lookup_name.strip(),
-                "address": found["address"],
+                "address": clean_address,
                 "latitude": found["latitude"],
                 "longitude": found["longitude"],
                 "cuisine": guessed_cuisine,
                 "location": guessed_neighborhood,
                 "type": guessed_type,
             }
-            st.toast("✅ Filled in what we could find — check it over below.")
+            st.rerun()
         else:
-            st.warning("Couldn't find that one automatically — fill in the fields below by hand.")
-        st.rerun()
+            st.session_state.autofill = {}
+            st.warning("⚠️ Couldn't locate that address — you can still fill in the fields below by hand.")
 
     autofill = st.session_state.get("autofill", {})
-    if autofill:
-        st.info(f"Auto-filled from **{autofill.get('name', '')}** — review the fields below, then save.")
+    if autofill.get("address") == clean_address and autofill.get("latitude"):
+        st.caption("📍 Neighborhood (and cuisine/type, if recognized) filled in below from the address — adjust anything that's off.")
 
-    name = st.text_input("Name*", value=autofill.get("name", ""))
     cuisine_default = autofill.get("cuisine", CUISINES[0])
     cuisine = st.selectbox("Cuisine/Style*", CUISINES,
                            index=CUISINES.index(cuisine_default) if cuisine_default in CUISINES else 0)
@@ -1080,10 +1090,8 @@ elif action == "➕ Add a Place":
     location_default = autofill.get("location", NEIGHBORHOODS[0])
     location = st.selectbox("Neighborhood*", NEIGHBORHOODS,
                             index=NEIGHBORHOODS.index(location_default) if location_default in NEIGHBORHOODS else 0)
-    address = st.text_input("Address*", value=autofill.get("address", ""))
-    type_default = autofill.get("type", "restaurant")
     place_type = st.selectbox("Type*", ["restaurant", "cocktail_bar"],
-                              index=0 if type_default == "restaurant" else 1,
+                              index=0 if autofill.get("type", "restaurant") == "restaurant" else 1,
                               format_func=lambda x: "Restaurant 🍽️" if x == "restaurant" else "Cocktail Bar 🍸")
     retired = st.checkbox("😔 Retired?", False)
     visited = st.checkbox("✅ I've already visited this place")
@@ -1097,8 +1105,8 @@ elif action == "➕ Add a Place":
         elif any(r["name"].lower() == name.lower().strip() for r in restaurants):
             st.warning("Already exists!")
         else:
-            # Reuse auto-filled coordinates if the address wasn't hand-edited
-            # afterward, so we don't geocode the same place twice.
+            # Reuse the coordinates from the address auto-fill lookup if the
+            # address wasn't hand-edited afterward, so we don't geocode twice.
             lat, lon = None, None
             if autofill.get("address") == address.strip() and autofill.get("latitude"):
                 lat, lon = autofill["latitude"], autofill["longitude"]
@@ -1136,6 +1144,8 @@ elif action == "➕ Add a Place":
                 restaurants.append(inserted)
                 if "autofill" in st.session_state:
                     del st.session_state.autofill
+                if "last_lookup_address" in st.session_state:
+                    del st.session_state.last_lookup_address
                 st.session_state.success_message = f"{name} added successfully!"
                 st.rerun()
             else:
