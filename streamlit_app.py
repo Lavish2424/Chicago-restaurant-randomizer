@@ -414,6 +414,7 @@ def google_maps_link(address, name=""):
 # match once we have coordinates for a place — saves picking it by hand.
 NEIGHBORHOOD_CENTROIDS = {
     "Berwyn": (41.8506, -87.7939),
+    "Bucktown": (41.9178, -87.6779),
     "Chinatown": (41.8517, -87.6326),
     "Fulton Market": (41.8869, -87.6503),
     "Gold Coast": (41.9066, -87.6296),
@@ -422,12 +423,17 @@ NEIGHBORHOOD_CENTROIDS = {
     "Near North Side": (41.8994, -87.6338),
     "Oakbrook": (41.8394, -87.9503),
     "Oak Lawn": (41.7200, -87.7581),
+    "Oak Park": (41.8850, -87.7845),
+    "Old Town": (41.9114, -87.6382),
     "Pilsen": (41.8563, -87.6564),
     "River North": (41.8919, -87.6343),
     "South Loop": (41.8664, -87.6270),
+    "The Loop": (41.8827, -87.6298),
+    "Uptown": (41.9686, -87.6551),
     "West Loop": (41.8849, -87.6534),
     "West Town": (41.8963, -87.6752),
     "Wicker Park": (41.9088, -87.6796),
+    "Wrigleyville": (41.9484, -87.6553),
 }
 
 # Keyword -> cuisine label, checked in order (first match wins).
@@ -692,6 +698,7 @@ if st.session_state.previous_action != action:
     st.session_state.previous_action = action
 NEIGHBORHOODS = [
     "Berwyn",
+    "Bucktown",
     "Chinatown",
     "Fulton Market",
     "Gold Coast",
@@ -700,12 +707,17 @@ NEIGHBORHOODS = [
     "Near North Side",
     "Oakbrook",
     "Oak Lawn",
+    "Oak Park",
+    "Old Town",
     "Pilsen",
     "River North",
     "South Loop",
+    "The Loop",
+    "Uptown",
     "West Loop",
     "West Town",
-    "Wicker Park"
+    "Wicker Park",
+    "Wrigleyville"
 ]
 CUISINES = [
     "American",
