@@ -409,6 +409,117 @@ def google_maps_link(address, name=""):
     query = f"{name}, {address}" if name else address
     return f"https://www.google.com/maps/search/?api=1&query={urllib.parse.quote(query)}"
 
+# ==================== AUTO-FILL HELPERS ====================
+# Rough lat/lon centers for each neighborhood, used to guess the closest
+# match once we have coordinates for a place — saves picking it by hand.
+NEIGHBORHOOD_CENTROIDS = {
+    "Berwyn": (41.8506, -87.7939),
+    "Chinatown": (41.8517, -87.6326),
+    "Fulton Market": (41.8869, -87.6503),
+    "Gold Coast": (41.9066, -87.6296),
+    "Lincoln Park": (41.9214, -87.6513),
+    "Logan Square": (41.9236, -87.7079),
+    "Near North Side": (41.8994, -87.6338),
+    "Oakbrook": (41.8394, -87.9503),
+    "Oak Lawn": (41.7200, -87.7581),
+    "Pilsen": (41.8563, -87.6564),
+    "River North": (41.8919, -87.6343),
+    "South Loop": (41.8664, -87.6270),
+    "West Loop": (41.8849, -87.6534),
+    "West Town": (41.8963, -87.6752),
+    "Wicker Park": (41.9088, -87.6796),
+}
+
+# Keyword -> cuisine label, checked in order (first match wins).
+CUISINE_KEYWORDS = [
+    ("pizza", "Italian"),
+    ("italian", "Italian"),
+    ("taco", "Mexican"),
+    ("mexican", "Mexican"),
+    ("chinese", "Chinese"),
+    ("dim sum", "Chinese"),
+    ("sushi", "Japanese"),
+    ("japanese", "Japanese"),
+    ("ramen", "Japanese"),
+    ("thai", "Thai"),
+    ("indian", "Indian"),
+    ("french", "French"),
+    ("bistro", "French"),
+    ("tapas", "Spanish"),
+    ("spanish", "Spanish"),
+    ("greek", "Mediterranean"),
+    ("mediterranean", "Mediterranean"),
+    ("seafood", "Seafood"),
+    ("steak", "Steakhouse"),
+    ("cocktail", "Cocktails"),
+    ("lounge", "Cocktails"),
+    ("wine bar", "Cocktails"),
+    ("asian", "Asian"),
+]
+# Keywords that suggest this POI is a bar rather than a restaurant.
+BAR_KEYWORDS = ["bar", "lounge", "pub", "tavern", "cocktail", "brewery", "speakeasy"]
+
+
+def haversine_miles(lat1, lon1, lat2, lon2):
+    """Great-circle distance between two lat/lon points, in miles."""
+    from math import radians, sin, cos, sqrt, atan2
+    r = 3958.8
+    lat1, lon1, lat2, lon2 = map(radians, [lat1, lon1, lat2, lon2])
+    dlat, dlon = lat2 - lat1, lon2 - lon1
+    a = sin(dlat / 2) ** 2 + cos(lat1) * cos(lat2) * sin(dlon / 2) ** 2
+    return 2 * r * atan2(sqrt(a), sqrt(1 - a))
+
+
+def guess_neighborhood(lat, lon):
+    """Nearest of our known Chicago-area neighborhoods to a coordinate."""
+    if lat is None or lon is None:
+        return None
+    name, _ = min(
+        NEIGHBORHOOD_CENTROIDS.items(),
+        key=lambda kv: haversine_miles(lat, lon, kv[1][0], kv[1][1]),
+    )
+    return name
+
+
+def guess_cuisine_and_type(category_text):
+    """Best-effort cuisine + restaurant/bar guess from an ArcGIS POI category string."""
+    text = (category_text or "").lower()
+    place_type = "cocktail_bar" if any(k in text for k in BAR_KEYWORDS) else "restaurant"
+    cuisine = "Other"
+    for keyword, label in CUISINE_KEYWORDS:
+        if keyword in text:
+            cuisine = label
+            break
+    return cuisine, place_type
+
+
+def lookup_place_by_name(name):
+    """
+    Search ArcGIS for a business by name (biased to Chicago) and return whatever
+    we can auto-fill from it: address, coordinates, and a guessed category.
+    Returns None if nothing usable came back — the form just stays manual.
+    """
+    try:
+        time.sleep(1)  # same throttle guard as get_lat_lon
+        query = f"{name.strip()}, Chicago, IL"
+        location = geolocator.geocode(query, exactly_one=True, out_fields="*")
+        if not location:
+            return None
+        raw = location.raw or {}
+        attrs = raw.get("attributes", {})
+        # ArcGIS's business-listing candidates carry a category in "Type" or
+        # "PlaceName" depending on the source dataset — check both.
+        category = attrs.get("Type") or attrs.get("PlaceName") or ""
+        return {
+            "address": location.address,
+            "latitude": location.latitude,
+            "longitude": location.longitude,
+            "category": category,
+        }
+    except Exception as e:
+        st.warning(f"Auto-fill lookup failed: {e}")
+        return None
+
 # ---------- Visual helpers ----------
 def badge_html(text, kind=""):
     cls = f"badge {kind}".strip()
@@ -566,6 +677,8 @@ if st.session_state.previous_action != action:
         del st.session_state[k]
     if "last_pick" in st.session_state:
         del st.session_state.last_pick
+    if "autofill" in st.session_state:
+        del st.session_state.autofill
     st.session_state.previous_action = action
 NEIGHBORHOODS = [
     "Berwyn",
@@ -925,12 +1038,52 @@ elif action == "➕ Add a Place":
     if not st.session_state.is_admin:
         st.warning("🔒 Admin login required to add places. Use the Admin Login in the sidebar.")
         st.stop()
-    name = st.text_input("Name*")
-    cuisine = st.selectbox("Cuisine/Style*", CUISINES)
+
+    # ---------- Smart auto-fill ----------
+    st.caption("Type just the name and we'll try to fill in the rest — always double-check before saving.")
+    lookup_col, btn_col = st.columns([4, 1])
+    with lookup_col:
+        lookup_name = st.text_input("Restaurant or bar name", key="lookup_name",
+                                    placeholder="e.g. Au Cheval")
+    with btn_col:
+        st.write("")  # vertical spacer to align button with input
+        do_lookup = st.button("🔍 Auto-fill", use_container_width=True, disabled=not lookup_name.strip())
+    if do_lookup:
+        with st.spinner(f"Looking up '{lookup_name}'..."):
+            found = lookup_place_by_name(lookup_name)
+        if found and found.get("address"):
+            guessed_cuisine, guessed_type = guess_cuisine_and_type(found.get("category"))
+            guessed_neighborhood = guess_neighborhood(found["latitude"], found["longitude"])
+            st.session_state.autofill = {
+                "name": lookup_name.strip(),
+                "address": found["address"],
+                "latitude": found["latitude"],
+                "longitude": found["longitude"],
+                "cuisine": guessed_cuisine,
+                "location": guessed_neighborhood,
+                "type": guessed_type,
+            }
+            st.toast("✅ Filled in what we could find — check it over below.")
+        else:
+            st.warning("Couldn't find that one automatically — fill in the fields below by hand.")
+        st.rerun()
+
+    autofill = st.session_state.get("autofill", {})
+    if autofill:
+        st.info(f"Auto-filled from **{autofill.get('name', '')}** — review the fields below, then save.")
+
+    name = st.text_input("Name*", value=autofill.get("name", ""))
+    cuisine_default = autofill.get("cuisine", CUISINES[0])
+    cuisine = st.selectbox("Cuisine/Style*", CUISINES,
+                           index=CUISINES.index(cuisine_default) if cuisine_default in CUISINES else 0)
     price = st.selectbox("Price*", ["$", "$$", "$$$", "$$$$"])
-    location = st.selectbox("Neighborhood*", NEIGHBORHOODS)
-    address = st.text_input("Address*")
+    location_default = autofill.get("location", NEIGHBORHOODS[0])
+    location = st.selectbox("Neighborhood*", NEIGHBORHOODS,
+                            index=NEIGHBORHOODS.index(location_default) if location_default in NEIGHBORHOODS else 0)
+    address = st.text_input("Address*", value=autofill.get("address", ""))
+    type_default = autofill.get("type", "restaurant")
     place_type = st.selectbox("Type*", ["restaurant", "cocktail_bar"],
+                              index=0 if type_default == "restaurant" else 1,
                               format_func=lambda x: "Restaurant 🍽️" if x == "restaurant" else "Cocktail Bar 🍸")
     retired = st.checkbox("😔 Retired?", False)
     visited = st.checkbox("✅ I've already visited this place")
@@ -944,9 +1097,14 @@ elif action == "➕ Add a Place":
         elif any(r["name"].lower() == name.lower().strip() for r in restaurants):
             st.warning("Already exists!")
         else:
+            # Reuse auto-filled coordinates if the address wasn't hand-edited
+            # afterward, so we don't geocode the same place twice.
             lat, lon = None, None
-            with st.spinner(f"Locating '{address}'..."):
-                lat, lon = get_lat_lon(address.strip())
+            if autofill.get("address") == address.strip() and autofill.get("latitude"):
+                lat, lon = autofill["latitude"], autofill["longitude"]
+            else:
+                with st.spinner(f"Locating '{address}'..."):
+                    lat, lon = get_lat_lon(address.strip())
             if lat is None:
                 st.warning("⚠️ Could not find coordinates. Place will save but won't appear on map.")
             else:
@@ -976,6 +1134,8 @@ elif action == "➕ Add a Place":
             inserted = save_data([new])
             if inserted:
                 restaurants.append(inserted)
+                if "autofill" in st.session_state:
+                    del st.session_state.autofill
                 st.session_state.success_message = f"{name} added successfully!"
                 st.rerun()
             else:
