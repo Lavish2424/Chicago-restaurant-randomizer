@@ -77,6 +77,10 @@ class PlacesError(Exception):
     """Raised with a human-readable message when a lookup fails."""
 
 
+class PlaceNotFound(PlacesError):
+    """Google no longer recognizes a saved place ID (it can happen; IDs aren't forever)."""
+
+
 def _is_restaurantish(place_type):
     return place_type.endswith("restaurant") or place_type in {"steak_house", "diner"}
 
@@ -172,3 +176,41 @@ def search_places(query, api_key, center=CHICAGO_CENTER, radius_m=50000.0,
     if resp.status_code != 200:
         raise PlacesError(_error_message(resp))
     return [parse_place(p) for p in resp.json().get("places", [])]
+
+
+# ---------- Place Details (live lookup by saved place ID) ----------
+DETAILS_URL = "https://places.googleapis.com/v1/places/{place_id}"
+# Pro + Enterprise fields. (Place Details field masks have no "places." prefix.)
+_DETAIL_FIELDS = [
+    "id", "displayName", "businessStatus", "googleMapsUri",
+    "websiteUri", "nationalPhoneNumber", "rating", "userRatingCount",
+]
+# `reservable` is an Enterprise + Atmosphere field. Asking for it moves the whole call to
+# that billing tier; pass include_reservable=False to stay in the cheaper Enterprise tier.
+_RESERVABLE_FIELD = "reservable"
+
+
+def get_place_details(place_id, api_key, include_reservable=True, timeout=10):
+    """Fresh website / phone / rating / reservations info for one saved place ID."""
+    fields = _DETAIL_FIELDS + ([_RESERVABLE_FIELD] if include_reservable else [])
+    headers = {"X-Goog-Api-Key": api_key, "X-Goog-FieldMask": ",".join(fields)}
+    try:
+        resp = requests.get(DETAILS_URL.format(place_id=place_id), headers=headers, timeout=timeout)
+    except requests.RequestException as e:
+        raise PlacesError(f"Couldn't reach Google Places: {e}") from e
+    if resp.status_code == 404:
+        raise PlaceNotFound("Google no longer recognizes this place's saved link.")
+    if resp.status_code != 200:
+        raise PlacesError(_error_message(resp))
+    p = resp.json()
+    return {
+        "place_id": p.get("id") or place_id,
+        "name": (p.get("displayName") or {}).get("text", ""),
+        "closed": p.get("businessStatus") == "CLOSED_PERMANENTLY",
+        "maps_url": p.get("googleMapsUri"),
+        "website": p.get("websiteUri"),
+        "phone": p.get("nationalPhoneNumber"),
+        "rating": p.get("rating"),
+        "rating_count": p.get("userRatingCount"),
+        "reservable": p.get("reservable"),  # True / False / None (unknown)
+    }
