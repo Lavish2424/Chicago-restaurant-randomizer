@@ -1056,112 +1056,18 @@ elif action == "🗺️ Map View":
     st_folium(m, width="100%", height=600)
 # ────────────────────────────── Add a Place ──────────────────────────────
 elif action == "➕ Add a Place":
-    st.header("Add a New Place 📍")
-    if not st.session_state.is_admin:
-        st.warning("🔒 Admin login required to add places. Use the Admin Login in the sidebar.")
-        st.stop()
-
-    name = st.text_input("Name*")
-
-    address = st.text_input("Address*", key="add_address",
-                            help="Neighborhood (and cuisine/type, when we can tell) fill in automatically once you enter this.")
-
-    # ---------- Auto-fill triggered by the address ----------
-    # Runs once per distinct address the user types (tracked via last_lookup_address),
-    # not on every keystroke — Streamlit only reruns this when the field loses focus
-    # or the user hits Enter, so this fires right after they finish typing it.
-    clean_address = address.strip()
-    if clean_address and clean_address != st.session_state.get("last_lookup_address"):
-        with st.spinner("Looking up that address..."):
-            found = lookup_place_by_address(clean_address)
-        st.session_state.last_lookup_address = clean_address
-        if found:
-            guessed_cuisine, guessed_type = guess_cuisine_and_type(found.get("category"))
-            guessed_neighborhood = guess_neighborhood(found["latitude"], found["longitude"])
-            st.session_state.autofill = {
-                "address": clean_address,
-                "latitude": found["latitude"],
-                "longitude": found["longitude"],
-                "cuisine": guessed_cuisine,
-                "location": guessed_neighborhood,
-                "type": guessed_type,
-            }
-            st.rerun()
-        else:
-            st.session_state.autofill = {}
-            st.warning("⚠️ Couldn't locate that address — you can still fill in the fields below by hand.")
-
-    autofill = st.session_state.get("autofill", {})
-    if autofill.get("address") == clean_address and autofill.get("latitude"):
-        st.caption("📍 Neighborhood (and cuisine/type, if recognized) filled in below from the address — adjust anything that's off.")
-
-    cuisine_default = autofill.get("cuisine", CUISINES[0])
-    cuisine = st.selectbox("Cuisine/Style*", CUISINES,
-                           index=CUISINES.index(cuisine_default) if cuisine_default in CUISINES else 0)
-    price = st.selectbox("Price*", ["$", "$$", "$$$", "$$$$"])
-    location_default = autofill.get("location", NEIGHBORHOODS[0])
-    location = st.selectbox("Neighborhood*", NEIGHBORHOODS,
-                            index=NEIGHBORHOODS.index(location_default) if location_default in NEIGHBORHOODS else 0)
-    place_type = st.selectbox("Type*", ["restaurant", "cocktail_bar"],
-                              index=0 if autofill.get("type", "restaurant") == "restaurant" else 1,
-                              format_func=lambda x: "Restaurant 🍽️" if x == "restaurant" else "Cocktail Bar 🍸")
-    retired = st.checkbox("😔 Retired?", False)
-    visited = st.checkbox("✅ I've already visited this place")
-    default_date = date.today() if visited else None
-    visited_date = st.date_input("Date Visited", value=default_date) if visited else None
-    uploaded_images = st.file_uploader("Upload photos", accept_multiple_files=True)
-    quick_notes = st.text_area("Quick notes (optional)", height=100)
-    if st.button("Add Place", type="primary"):
-        if not all([name.strip(), address.strip()]):
-            st.error("Name and address required")
-        elif any(r["name"].lower() == name.lower().strip() for r in restaurants):
-            st.warning("Already exists!")
-        else:
-            # Reuse the coordinates from the address auto-fill lookup if the
-            # address wasn't hand-edited afterward, so we don't geocode twice.
-            lat, lon = None, None
-            if autofill.get("address") == address.strip() and autofill.get("latitude"):
-                lat, lon = autofill["latitude"], autofill["longitude"]
-            else:
-                with st.spinner(f"Locating '{address}'..."):
-                    lat, lon = get_lat_lon(address.strip())
-            if lat is None:
-                st.warning("⚠️ Could not find coordinates. Place will save but won't appear on map.")
-            else:
-                st.toast("✅ Location found!")
-            image_urls = []
-            if uploaded_images:
-                with st.spinner("Uploading images..."):
-                    image_urls = upload_images_to_supabase(uploaded_images, name)
-            visited_date_str = visited_date.strftime("%B %d, %Y") if visited_date else None
-            new_reviews = [quick_notes.strip()] if quick_notes.strip() else []
-            new = {
-                "name": name.strip(),
-                "cuisine": cuisine,
-                "price": price,
-                "location": location,
-                "address": address.strip(),
-                "type": place_type,
-                "favorite": False,
-                "visited": visited,
-                "visited_date": visited_date_str,
-                "reviews": new_reviews,
-                "images": image_urls,
-                "latitude": lat,
-                "longitude": lon,
-                "retired": retired
-            }
-            inserted = save_data([new])
-            if inserted:
-                restaurants.append(inserted)
-                if "autofill" in st.session_state:
-                    del st.session_state.autofill
-                if "last_lookup_address" in st.session_state:
-                    del st.session_state.last_lookup_address
-                st.session_state.success_message = f"{name} added successfully!"
-                st.rerun()
-            else:
-                st.error("Failed to add place.")
+    from add_place import render_add_place
+    render_add_place(
+        restaurants=restaurants,
+        save_data=save_data,
+        upload_images=upload_images_to_supabase,
+        get_lat_lon=get_lat_lon,
+        lookup_by_address=lookup_place_by_address,
+        guess_neighborhood=guess_neighborhood,
+        guess_cuisine_and_type=guess_cuisine_and_type,
+        cuisines=CUISINES,
+        neighborhoods=NEIGHBORHOODS,
+    )
 # ────────────────────────────── Random Pick ──────────────────────────────
 else:
     st.header("Random Place Picker 🎲")
