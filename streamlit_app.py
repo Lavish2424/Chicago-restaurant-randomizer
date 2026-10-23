@@ -11,6 +11,7 @@ import time
 from folium.plugins import LocateControl, MarkerCluster
 from PIL import Image, ExifTags, ImageOps  # ADDED: For image resizing/fixing
 import io  # ADDED: For handling image byte streams
+from place_details import render_google_details
 
 # ==================== PAGE CONFIG (must be first Streamlit call) ====================
 st.set_page_config(
@@ -261,6 +262,7 @@ supabase: Client = create_client(supabase_url, supabase_key)
 BUCKET_NAME = "restaurant-images"
 # Initialize ArcGIS Geocoder
 geolocator = ArcGIS(timeout=10)
+GOOGLE_PLACES_KEY = st.secrets.get("GOOGLE_PLACES_API_KEY", "")
 # ==================== HELPER FUNCTIONS ====================
 def get_lat_lon(address):
     """Converts an address string to latitude and longitude using ArcGIS."""
@@ -303,6 +305,7 @@ def load_data():
             place.setdefault("longitude", None)
             place.setdefault("retired", False)
             place.setdefault("created_at", None)
+            place.setdefault("google_place_id", None)
             normalized = []
             for rev in place.get("reviews", []):
                 if rev:
@@ -338,6 +341,7 @@ def save_data(data):
                 "latitude": place.get("latitude"),
                 "longitude": place.get("longitude"),
                 "retired": place.get("retired", False),
+                "google_place_id": place.get("google_place_id"),
             }
             if place.get("created_at") is None:
                 # Let DB set default on insert
@@ -826,6 +830,12 @@ if action == "📖 View All Places":
                             st.caption("⚠️ No coordinates found for map.")
                     with col_map:
                         st.markdown(f"[🗺️ Open in Maps]({google_maps_link(r.get('address', ''), r['name'])})", unsafe_allow_html=True)
+                    render_google_details(
+                        r, f"vap_{r.get('id', global_idx)}",
+                        api_key=GOOGLE_PLACES_KEY,
+                        is_admin=st.session_state.is_admin,
+                        save_data=save_data,
+                    )
                     if r["reviews"]:
                         st.markdown("**📝 Notes**")
                         for note in reversed(r["reviews"]):
@@ -966,7 +976,11 @@ if action == "📖 View All Places":
                                 "reviews": cleaned_reviews,
                                 "latitude": new_lat,
                                 "longitude": new_lon,
-                                "retired": edit_retired
+                                "retired": edit_retired,
+                                "google_place_id": (
+                                    None if edit_address.strip() != r["address"]
+                                    else r.get("google_place_id")
+                                ),
                             })
                             save_data([restaurants[global_idx]])
                             del st.session_state[f"edit_mode_{global_idx}"]
@@ -1150,6 +1164,13 @@ else:
                         st.markdown("---")
                         st.write(f"📍 **Address:** {c.get('address','')}")
                         st.markdown(f"[🗺️ Open in Google Maps]({google_maps_link(c.get('address',''), c['name'])})", unsafe_allow_html=True)
+                        render_google_details(
+                            c, f"rand_{c.get('id', idx)}",
+                            api_key=GOOGLE_PLACES_KEY,
+                            is_admin=st.session_state.is_admin,
+                            save_data=save_data,
+                            auto=True,
+                        )
                         if c["reviews"]:
                             st.markdown("### 📝 Notes")
                             for note in c["reviews"]:
