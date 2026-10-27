@@ -44,7 +44,7 @@ jobs:
           WRAPPED_PERIOD: ${{ github.event.schedule == '0 14 1 1 *' && 'year' || inputs.period || 'month' }}
           WRAPPED_FOR: ${{ inputs.for }}
           DRY_RUN: ${{ inputs.dry_run }}
-        run: python scripts/wrapped_email.py
+        run: python wrapped_email.py
 
       - name: Keep the dry-run preview
         if: ${{ inputs.dry_run }}
