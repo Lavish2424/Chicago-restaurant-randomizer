@@ -2,6 +2,7 @@ import streamlit as st
 import random
 import urllib.parse
 from datetime import datetime, date
+from zoneinfo import ZoneInfo
 from supabase import create_client, Client
 import os
 from streamlit_folium import st_folium
@@ -406,9 +407,23 @@ def toggle_favorite(idx):
     save_data([restaurants[idx]])
     st.rerun()
 def toggle_visited(idx):
-    restaurants[idx]["visited"] = not restaurants[idx].get("visited", False)
+    now_visited = not restaurants[idx].get("visited", False)
+    restaurants[idx]["visited"] = now_visited
+    # Date the visit so it shows up in the monthly recap email; clear it if un-visited.
+    if now_visited:
+        if not restaurants[idx].get("visited_date"):
+            restaurants[idx]["visited_date"] = datetime.now(ZoneInfo("America/Chicago")).strftime("%B %d, %Y")
+    else:
+        restaurants[idx]["visited_date"] = None
     save_data([restaurants[idx]])
     st.rerun()
+def map_bounds(points):
+    """[[south, west], [north, east]] around a list of (lat, lon) points, or None if empty."""
+    if not points:
+        return None
+    lats = [p[0] for p in points]
+    lons = [p[1] for p in points]
+    return [[min(lats), min(lons)], [max(lats), max(lons)]]
 def google_maps_link(address, name=""):
     query = f"{name}, {address}" if name else address
     return f"https://www.google.com/maps/search/?api=1&query={urllib.parse.quote(query)}"
@@ -1001,13 +1016,40 @@ if action == "📖 View All Places":
 # ────────────────────────────── Map View ──────────────────────────────
 elif action == "🗺️ Map View":
     st.header("Chicago Food Map 🗺️")
+    # Basemap choices: (CARTO style name, Esri fallback tiles used when there's no CARTO key)
+    MAP_STYLES = {
+        "Streets": ("voyager", "https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}"),
+        "Light": ("light_all", "https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Light_Gray_Base/MapServer/tile/{z}/{y}/{x}"),
+        "Dark": ("dark_all", "https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Base/MapServer/tile/{z}/{y}/{x}"),
+    }
+    map_style = st.radio(
+        "Map style", list(MAP_STYLES), horizontal=True,
+        key="map_style", label_visibility="collapsed",
+    )
+    # A soft brass frame so a bright map doesn't glare against the dark page.
+    st.markdown(
+        """
+        <style>
+        iframe[title="streamlit_folium.st_folium"] {
+            border: 1px solid var(--hairline);
+            border-radius: 8px;
+        }
+        </style>
+        """,
+        unsafe_allow_html=True,
+    )
+    # The light-gray "not visited" pin disappears on a light map, so use a darker gray there.
+    on_dark = map_style == "Dark"
+    not_visited_color = "lightgray" if on_dark else "gray"
+    not_visited_swatch = "#A79A85" if on_dark else "#7A7A7A"
     carto_key = st.secrets.get("CARTO_API_KEY", "")
+    carto_name, esri_url = MAP_STYLES[map_style]
     if carto_key:
-        tile_url = f"https://basemaps.cartocdn.com/rastertiles/dark_all/{{z}}/{{x}}/{{y}}{{r}}.png?key={carto_key}"
+        tile_url = f"https://basemaps.cartocdn.com/rastertiles/{carto_name}/{{z}}/{{x}}/{{y}}{{r}}.png?key={carto_key}"
         tile_attr = '© <a href="https://carto.com/attributions">CARTO</a>'
     else:
         st.warning("No CARTO_API_KEY found in secrets — falling back to a free basemap without a key.")
-        tile_url = "https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Base/MapServer/tile/{z}/{y}/{x}"
+        tile_url = esri_url
         tile_attr = "Esri, HERE, Garmin, © OpenStreetMap contributors"
     m = folium.Map(location=[41.8781, -87.6298], zoom_start=12, tiles=tile_url, attr=tile_attr)
     LocateControl(auto_start=False, strings={"title": "Show me where I am", "popup": "You are here!"}).add_to(m)
@@ -1022,7 +1064,7 @@ elif action == "🗺️ Map View":
             <div style="padding: 8px;">
                 <i class="fa fa-map-marker" style="color:#5B9BD5; font-size:14px;"></i> You<br>
                 <i class="fa fa-map-marker" style="color:#6B8863; font-size:14px;"></i> Visited<br>
-                <i class="fa fa-map-marker" style="color:#A79A85; font-size:14px;"></i> Not Visited<br>
+                <i class="fa fa-map-marker" style="color:__NV__; font-size:14px;"></i> Not Visited<br>
                 <hr style="margin: 5px 0; border-color: rgba(201,160,52,0.3);">
                 🍽️ Restaurant<br>
                 🍸 Cocktail Bar
@@ -1030,9 +1072,10 @@ elif action == "🗺️ Map View":
         </details>
     </div>
     '''
-    m.get_root().html.add_child(folium.Element(legend_html))
+    m.get_root().html.add_child(folium.Element(legend_html.replace("__NV__", not_visited_swatch)))
     places_mapped = 0
     places_skipped = 0
+    mapped_points = []
     for r in restaurants:
         if r.get("retired", False):
             places_skipped += 1
@@ -1041,7 +1084,8 @@ elif action == "🗺️ Map View":
         lon = r.get("longitude")
         if lat is not None and lon is not None:
             places_mapped += 1
-            color = "green" if r.get("visited") else "lightgray"
+            mapped_points.append((lat, lon))
+            color = "green" if r.get("visited") else not_visited_color
             icon_name = "glass" if r["type"] == "cocktail_bar" else "cutlery"
             icon_prefix = "glyphicon"
             image_html = ""
@@ -1064,6 +1108,11 @@ elif action == "🗺️ Map View":
             ).add_to(marker_cluster)
         else:
             places_skipped += 1
+    # Frame the map around the places we actually have (max_zoom keeps a single pin from
+    # zooming in to street level). With no places, the default Chicago view stays.
+    bounds = map_bounds(mapped_points)
+    if bounds:
+        m.fit_bounds(bounds, padding=(40, 40), max_zoom=15)
     st.caption(f"Showing {places_mapped} location(s).")
     if places_skipped > 0:
         st.caption(f"({places_skipped} places hidden due to missing coordinates or retired status)")
