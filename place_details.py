@@ -1,21 +1,30 @@
 """
-Live Google details (rating, website, phone, reservations) for saved places.
+Live Google details (rating, website, phone, reservations, photo) for saved places.
 
 Only the Google place ID is stored in your database. Details are looked up when you
-ask for them (button) or when a place is picked in Random Pick, and cached for a few
-hours so repeat views don't use up the free monthly allowance.
+ask for them (button) or when a place is picked in Random Pick. Text details are cached
+for a few hours so repeat views don't use up the free monthly allowance. The photo is
+cached only briefly: Google doesn't allow photo names to be cached, so it is re-fetched
+rather than kept.
 """
 import streamlit as st
 
 import places_lookup as pl
 
 CACHE_SECONDS = 6 * 60 * 60
+PHOTO_CACHE_SECONDS = 20 * 60  # just long enough that clicking around doesn't re-bill each click
+SHOW_GOOGLE_PHOTO = True       # set to False to turn the photo off (saves the photo calls)
 
 
 @st.cache_data(ttl=CACHE_SECONDS, show_spinner=False)
 def _cached_details(place_id, _api_key):
     # The leading underscore keeps the API key out of the cache key.
     return pl.get_place_details(place_id, _api_key)
+
+
+@st.cache_data(ttl=PHOTO_CACHE_SECONDS, show_spinner=False)
+def _cached_photo(place_id, _api_key):
+    return pl.get_place_photo(place_id, _api_key)
 
 
 # ---------- callbacks (run before the next rerun) ----------
@@ -81,6 +90,19 @@ def _render_link_ui(r, key, api_key, save_data):
     st.button("Cancel", key=f"gd_cancel_{key}", on_click=_cancel_link, args=(key,))
 
 
+def _render_photo(photo):
+    st.image(photo["url"], width=420)
+    # Google requires the photographer credit to be shown wherever the photo is.
+    name = photo.get("credit_name")
+    uri = photo.get("credit_uri")
+    if name and uri:
+        st.caption(f"Photo: [{name}]({uri}) · via Google Maps")
+    elif name:
+        st.caption(f"Photo: {name} · via Google Maps")
+    else:
+        st.caption("Photo via Google Maps")
+
+
 def _render_card(d):
     if d["closed"]:
         st.warning("⚠️ Google lists this place as permanently closed.")
@@ -108,7 +130,7 @@ def _render_card(d):
     if not facts and not links:
         st.caption("Google has no extra details for this place.")
     else:
-        st.caption("Live from Google · refreshed every few hours")
+        st.caption("Live from Google · cached for a few hours")
 
 
 def render_google_details(r, key, *, api_key, is_admin, save_data, auto=False):
@@ -146,5 +168,14 @@ def render_google_details(r, key, *, api_key, is_admin, save_data, auto=False):
     except pl.PlacesError as e:
         st.warning(str(e))
         return
+
+    # A missing or failed photo should never hide the rest of the details.
+    if SHOW_GOOGLE_PHOTO:
+        try:
+            photo = _cached_photo(place_id, api_key)
+        except pl.PlacesError:
+            photo = None
+        if photo:
+            _render_photo(photo)
 
     _render_card(details)
