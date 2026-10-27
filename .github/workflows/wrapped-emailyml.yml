@@ -1,0 +1,54 @@
+name: Wrapped email
+
+on:
+  schedule:
+    - cron: "0 14 1 2-12 *"   # 1st of Feb-Dec, 14:00 UTC (about 9am Chicago): last month's Wrapped
+    - cron: "0 14 1 1 *"      # Jan 1: the whole previous year's Wrapped (covers December too)
+  workflow_dispatch:
+    inputs:
+      period:
+        description: "Month or year"
+        type: choice
+        options: [month, year]
+        default: month
+      for:
+        description: "Which one: YYYY-MM for a month, YYYY for a year (blank = the last full one)"
+        required: false
+        default: ""
+      dry_run:
+        description: "Dry run: build the email but don't send it"
+        type: boolean
+        default: false
+
+jobs:
+  wrapped:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: pip install requests
+
+      - name: Build and send
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
+          SMTP_USER: ${{ secrets.SMTP_USER }}
+          SMTP_PASSWORD: ${{ secrets.SMTP_PASSWORD }}
+          RECAP_TO: ${{ secrets.RECAP_TO }}
+          WRAPPED_PERIOD: ${{ github.event.schedule == '0 14 1 1 *' && 'year' || inputs.period || 'month' }}
+          WRAPPED_FOR: ${{ inputs.for }}
+          DRY_RUN: ${{ inputs.dry_run }}
+        run: python scripts/wrapped_email.py
+
+      - name: Keep the dry-run preview
+        if: ${{ inputs.dry_run }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: wrapped-preview
+          path: wrapped_preview.html
