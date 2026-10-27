@@ -57,7 +57,6 @@ def render_add_place(*, restaurants, save_data, upload_images, get_lat_lon,
             "cuisine": s["add_cuisine"],
             "location": s["add_location"],
             "type": place["type"],
-            "place_id": place["place_id"],
         }
         s["last_lookup_address"] = place["address"]  # skip the address re-lookup
         s["picked_note"] = (
@@ -188,11 +187,6 @@ def render_add_place(*, restaurants, save_data, upload_images, get_lat_lon,
                 with st.spinner("Uploading images..."):
                     image_urls = upload_images(uploaded_images, name)
 
-            # Keep the Google place ID only if the address wasn't edited after picking.
-            google_place_id = (
-                autofill.get("place_id") if autofill.get("address") == address.strip() else None
-            )
-
             new = {
                 "name": name.strip(),
                 "cuisine": cuisine,
@@ -208,7 +202,6 @@ def render_add_place(*, restaurants, save_data, upload_images, get_lat_lon,
                 "latitude": lat,
                 "longitude": lon,
                 "retired": retired,
-                "google_place_id": google_place_id,
             }
             inserted = save_data([new])
             if inserted:
