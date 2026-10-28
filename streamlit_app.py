@@ -457,7 +457,7 @@ NEIGHBORHOOD_CENTROIDS = {
 
 # Keyword -> cuisine label, checked in order (first match wins).
 CUISINE_KEYWORDS = [
-    ("pizza", "Pizza"),
+    ("pizza", "Italian"),
     ("italian", "Italian"),
     ("taco", "Mexican"),
     ("mexican", "Mexican"),
@@ -466,8 +466,6 @@ CUISINE_KEYWORDS = [
     ("sushi", "Japanese"),
     ("japanese", "Japanese"),
     ("ramen", "Japanese"),
-    ("korean", "Korean"),
-    ("vietnamese", "Vietnamese"),
     ("thai", "Thai"),
     ("indian", "Indian"),
     ("french", "French"),
@@ -476,40 +474,8 @@ CUISINE_KEYWORDS = [
     ("spanish", "Spanish"),
     ("greek", "Greek"),
     ("mediterranean", "Mediterranean"),
-    ("middle eastern", "Middle Eastern"),
-    ("lebanese", "Middle Eastern"),
-    ("turkish", "Middle Eastern"),
-    ("falafel", "Middle Eastern"),
-    ("ethiopian", "African"),
-    ("african", "African"),
-    ("caribbean", "Caribbean"),
-    ("jamaican", "Caribbean"),
-    ("peruvian", "Latin American"),
-    ("brazilian", "Latin American"),
-    ("argentin", "Latin American"),
-    ("colombian", "Latin American"),
-    ("cuban", "Latin American"),
-    ("puerto rican", "Latin American"),
-    ("latin", "Latin American"),
-    ("german", "German"),
-    ("polish", "Polish & Eastern European"),
-    ("pierogi", "Polish & Eastern European"),
-    ("ukrainian", "Polish & Eastern European"),
-    ("eastern european", "Polish & Eastern European"),
     ("seafood", "Seafood"),
     ("steak", "Steakhouse"),
-    ("burger", "Burgers"),
-    ("barbecue", "Barbecue"),
-    ("bbq", "Barbecue"),
-    ("vegan", "Vegetarian & Vegan"),
-    ("vegetarian", "Vegetarian & Vegan"),
-    ("sandwich", "Deli & Sandwiches"),
-    ("deli", "Deli & Sandwiches"),
-    ("dessert", "Dessert"),
-    ("ice cream", "Dessert"),
-    ("bakery", "Coffee & Bakery"),
-    ("cafe", "Coffee & Bakery"),
-    ("coffee", "Coffee & Bakery"),
     ("cocktail", "Cocktails"),
     ("lounge", "Cocktails"),
     ("wine bar", "Cocktails"),
@@ -580,9 +546,7 @@ def guess_cuisine_and_type(category_text):
         if keyword in text:
             cuisine = label
             break
-    if cuisine == "Other" and place_type == "cafe":
-        cuisine = "Coffee & Bakery"
-    elif cuisine == "Other" and place_type == "breakfast":
+    if cuisine == "Other" and place_type == "breakfast":
         cuisine = "American"
     return cuisine, place_type
 
@@ -808,37 +772,22 @@ NEIGHBORHOODS = [
     "Wrigleyville"
 ]
 CUISINES = [
-    "African",
     "American",
     "Asian",
-    "Barbecue",
-    "Burgers",
-    "Caribbean",
     "Chinese",
     "Cocktails",
-    "Coffee & Bakery",
-    "Deli & Sandwiches",
-    "Dessert",
     "French",
-    "German",
     "Greek",
     "Indian",
     "Italian",
     "Japanese",
-    "Korean",
-    "Latin American",
     "Mediterranean",
     "Mexican",
-    "Middle Eastern",
     "Other",
-    "Pizza",
-    "Polish & Eastern European",
     "Seafood",
     "Spanish",
     "Steakhouse",
     "Thai",
-    "Vegetarian & Vegan",
-    "Vietnamese",
 ]
 VISITED_OPTIONS = ["All", "Visited Only", "Not Visited Yet"]
 # ────────────────────────────── View All Places ──────────────────────────────
