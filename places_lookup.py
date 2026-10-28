@@ -33,32 +33,51 @@ PRICE_MAP = {
 # Google place type -> one of the app's CUISINES labels.
 CUISINE_BY_TYPE = {
     "italian_restaurant": "Italian",
-    "pizza_restaurant": "Italian",
+    "pizza_restaurant": "Pizza",
     "mexican_restaurant": "Mexican",
     "chinese_restaurant": "Chinese",
     "japanese_restaurant": "Japanese",
     "sushi_restaurant": "Japanese",
     "ramen_restaurant": "Japanese",
+    "korean_restaurant": "Korean",
+    "vietnamese_restaurant": "Vietnamese",
     "thai_restaurant": "Thai",
     "indian_restaurant": "Indian",
     "french_restaurant": "French",
     "spanish_restaurant": "Spanish",
-    "greek_restaurant": "Mediterranean",
+    "greek_restaurant": "Greek",
     "mediterranean_restaurant": "Mediterranean",
-    "middle_eastern_restaurant": "Mediterranean",
-    "lebanese_restaurant": "Mediterranean",
-    "turkish_restaurant": "Mediterranean",
+    "middle_eastern_restaurant": "Middle Eastern",
+    "lebanese_restaurant": "Middle Eastern",
+    "turkish_restaurant": "Middle Eastern",
+    "african_restaurant": "African",
+    "brazilian_restaurant": "Latin American",
     "seafood_restaurant": "Seafood",
     "steak_house": "Steakhouse",
     "american_restaurant": "American",
-    "hamburger_restaurant": "American",
-    "barbecue_restaurant": "American",
-    "brunch_restaurant": "American",
-    "breakfast_restaurant": "American",
     "diner": "American",
+    "bar_and_grill": "American",
+    "breakfast_restaurant": "American",
+    "brunch_restaurant": "American",
+    "hamburger_restaurant": "Burgers",
+    "barbecue_restaurant": "Barbecue",
+    "vegan_restaurant": "Vegetarian & Vegan",
+    "vegetarian_restaurant": "Vegetarian & Vegan",
+    "sandwich_shop": "Deli & Sandwiches",
+    "deli": "Deli & Sandwiches",
+    "dessert_shop": "Dessert",
+    "dessert_restaurant": "Dessert",
+    "ice_cream_shop": "Dessert",
+    "candy_store": "Dessert",
+    "chocolate_shop": "Dessert",
+    "bakery": "Coffee & Bakery",
+    "bagel_shop": "Coffee & Bakery",
+    "donut_shop": "Coffee & Bakery",
+    "cafe": "Coffee & Bakery",
+    "coffee_shop": "Coffee & Bakery",
+    "tea_house": "Coffee & Bakery",
+    "juice_shop": "Coffee & Bakery",
     "asian_restaurant": "Asian",
-    "korean_restaurant": "Asian",
-    "vietnamese_restaurant": "Asian",
     "indonesian_restaurant": "Asian",
     "cocktail_bar": "Cocktails",
     "wine_bar": "Cocktails",
@@ -70,6 +89,11 @@ CUISINE_BY_TYPE = {
 BAR_TYPES = {
     "bar", "cocktail_bar", "wine_bar", "lounge_bar", "pub", "irish_pub",
     "brewery", "brewpub", "night_club",
+}
+BREAKFAST_TYPES = {"breakfast_restaurant", "brunch_restaurant"}
+CAFE_TYPES = {
+    "cafe", "coffee_shop", "bakery", "bagel_shop", "donut_shop", "tea_house",
+    "cat_cafe", "dog_cafe", "juice_shop",
 }
 
 
@@ -94,14 +118,24 @@ def guess_cuisine(types):
 
 
 def guess_type(primary_type, types):
-    """'cocktail_bar' or 'restaurant' (the two values the app stores)."""
+    """One of the app's place types: cocktail_bar, breakfast, cafe or restaurant."""
     if primary_type in BAR_TYPES:
         return "cocktail_bar"
+    if primary_type in BREAKFAST_TYPES:
+        return "breakfast"
+    if primary_type in CAFE_TYPES:
+        return "cafe"
     if primary_type and _is_restaurantish(primary_type):
         return "restaurant"
     has_bar = any(t in BAR_TYPES for t in types)
     has_restaurant = any(_is_restaurantish(t) for t in types)
-    return "cocktail_bar" if has_bar and not has_restaurant else "restaurant"
+    if has_bar and not has_restaurant:
+        return "cocktail_bar"
+    if any(t in CAFE_TYPES for t in types):
+        return "cafe"
+    if any(t in BREAKFAST_TYPES for t in types):
+        return "breakfast"
+    return "restaurant"
 
 
 def parse_place(p):
@@ -111,7 +145,9 @@ def parse_place(p):
     types = [t for t in types if t]
 
     place_type = guess_type(primary, types)
-    cuisine = guess_cuisine(types) or ("Cocktails" if place_type == "cocktail_bar" else "Other")
+    cuisine = guess_cuisine(types) or {
+        "cocktail_bar": "Cocktails", "cafe": "Coffee & Bakery", "breakfast": "American",
+    }.get(place_type, "Other")
 
     address = (p.get("formattedAddress") or "").strip()
     if address.endswith(", USA"):
