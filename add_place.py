@@ -22,12 +22,14 @@ FORM_KEYS = [
 
 def render_add_place(*, restaurants, save_data, upload_images, get_lat_lon,
                      lookup_by_address, guess_neighborhood, guess_cuisine_and_type,
-                     cuisines, neighborhoods):
+                     cuisines, neighborhoods,
+                     place_types=("restaurant", "cocktail_bar"), type_labels=None):
     st.header("Add a New Place 📍")
     if not st.session_state.is_admin:
         st.warning("🔒 Admin login required to add places. Use the Admin Login in the sidebar.")
         st.stop()
 
+    type_labels = type_labels or {"restaurant": "Restaurant 🍽️", "cocktail_bar": "Cocktail Bar 🍸"}
     s = st.session_state
     defaults = {
         "add_name": "", "add_address": "", "add_cuisine": cuisines[0],
@@ -153,8 +155,8 @@ def render_add_place(*, restaurants, save_data, upload_images, get_lat_lon,
     price = st.selectbox("Price*", PRICES, key="add_price")
     location = st.selectbox("Neighborhood*", neighborhoods, key="add_location")
     place_type = st.selectbox(
-        "Type*", ["restaurant", "cocktail_bar"], key="add_type",
-        format_func=lambda x: "Restaurant 🍽️" if x == "restaurant" else "Cocktail Bar 🍸",
+        "Type*", list(place_types), key="add_type",
+        format_func=lambda x: type_labels.get(x, x),
     )
     retired = st.checkbox("😔 Retired?", key="add_retired")
     visited = st.checkbox("✅ I've already visited this place", key="add_visited")
