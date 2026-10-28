@@ -201,7 +201,8 @@ def analyze(places, period, rng_seed=None):
     hoods = Counter(v.get("location") for v in visits if v.get("location"))
     cuisines = Counter(v.get("cuisine") for v in visits if v.get("cuisine"))
     prices = Counter(v.get("price") for v in visits if v.get("price"))
-    types = Counter("bar" if v.get("type") == "cocktail_bar" else "restaurant" for v in visits)
+    type_keys = {"cocktail_bar": "bar", "cafe": "cafe", "breakfast": "breakfast"}
+    types = Counter(type_keys.get(v.get("type"), "restaurant") for v in visits)
     weekdays = Counter(v["_date"].weekday() for v in visits)
 
     price_levels = [len(v["price"]) for v in visits if v.get("price") and 1 <= len(v["price"]) <= 4]
@@ -403,8 +404,12 @@ def build_email(s):
     tiles = [(str(n), "places visited", delta_text(n, s["prev_count"], period["prev_label"])),
              (str(s["added"]), "added to the list", "")]
     r, b = s["types"].get("restaurant", 0), s["types"].get("bar", 0)
+    c = s["types"].get("cafe", 0) + s["types"].get("breakfast", 0)
     if n:
-        tiles.append((f"{r} / {b}", "restaurants / bars", ""))
+        if c:
+            tiles.append((f"{r} / {b} / {c}", "restaurants / bars / cafes & brunch", ""))
+        else:
+            tiles.append((f"{r} / {b}", "restaurants / bars", ""))
         if s["avg_price"]:
             tiles.append(("$" * max(1, round(s["avg_price"])), "typical price", f"average {s['avg_price']:.1f} of 4"))
 
@@ -548,7 +553,11 @@ def build_text(s, span):
         lines[-1] += f" ({d})"
     lines.append(f"{s['added']} added to the list")
     if n:
-        lines.append(f"{plural(s['types'].get('restaurant', 0), 'restaurant')}, {plural(s['types'].get('bar', 0), 'bar')}")
+        line = f"{plural(s['types'].get('restaurant', 0), 'restaurant')}, {plural(s['types'].get('bar', 0), 'bar')}"
+        cafes = s["types"].get("cafe", 0) + s["types"].get("breakfast", 0)
+        if cafes:
+            line += f", {plural(cafes, 'cafe or brunch spot', 'cafes or brunch spots')}"
+        lines.append(line)
         if s["avg_price"]:
             lines.append(f"Typical price: {'$' * max(1, round(s['avg_price']))} (avg {s['avg_price']:.1f}/4)")
     lines.append("")
