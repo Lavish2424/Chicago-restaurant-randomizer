@@ -457,7 +457,7 @@ NEIGHBORHOOD_CENTROIDS = {
 
 # Keyword -> cuisine label, checked in order (first match wins).
 CUISINE_KEYWORDS = [
-    ("pizza", "Pizza"),
+    ("pizza", "Italian"),
     ("italian", "Italian"),
     ("taco", "Mexican"),
     ("mexican", "Mexican"),
@@ -466,50 +466,16 @@ CUISINE_KEYWORDS = [
     ("sushi", "Japanese"),
     ("japanese", "Japanese"),
     ("ramen", "Japanese"),
-    ("korean", "Korean"),
-    ("vietnamese", "Vietnamese"),
     ("thai", "Thai"),
     ("indian", "Indian"),
     ("french", "French"),
     ("bistro", "French"),
     ("tapas", "Spanish"),
     ("spanish", "Spanish"),
-    ("greek", "Greek"),
+    ("greek", "Mediterranean"),
     ("mediterranean", "Mediterranean"),
-    ("middle eastern", "Middle Eastern"),
-    ("lebanese", "Middle Eastern"),
-    ("turkish", "Middle Eastern"),
-    ("falafel", "Middle Eastern"),
-    ("ethiopian", "African"),
-    ("african", "African"),
-    ("caribbean", "Caribbean"),
-    ("jamaican", "Caribbean"),
-    ("peruvian", "Latin American"),
-    ("brazilian", "Latin American"),
-    ("argentin", "Latin American"),
-    ("colombian", "Latin American"),
-    ("cuban", "Latin American"),
-    ("puerto rican", "Latin American"),
-    ("latin", "Latin American"),
-    ("german", "German"),
-    ("polish", "Polish & Eastern European"),
-    ("pierogi", "Polish & Eastern European"),
-    ("ukrainian", "Polish & Eastern European"),
-    ("eastern european", "Polish & Eastern European"),
     ("seafood", "Seafood"),
     ("steak", "Steakhouse"),
-    ("burger", "Burgers"),
-    ("barbecue", "Barbecue"),
-    ("bbq", "Barbecue"),
-    ("vegan", "Vegetarian & Vegan"),
-    ("vegetarian", "Vegetarian & Vegan"),
-    ("sandwich", "Deli & Sandwiches"),
-    ("deli", "Deli & Sandwiches"),
-    ("dessert", "Dessert"),
-    ("ice cream", "Dessert"),
-    ("bakery", "Coffee & Bakery"),
-    ("cafe", "Coffee & Bakery"),
-    ("coffee", "Coffee & Bakery"),
     ("cocktail", "Cocktails"),
     ("lounge", "Cocktails"),
     ("wine bar", "Cocktails"),
@@ -517,30 +483,6 @@ CUISINE_KEYWORDS = [
 ]
 # Keywords that suggest this POI is a bar rather than a restaurant.
 BAR_KEYWORDS = ["bar", "lounge", "pub", "tavern", "cocktail", "brewery", "speakeasy"]
-# Cafes and breakfast spots are checked before bars so "Coffee Bar" doesn't count as a cocktail bar.
-CAFE_KEYWORDS = ["cafe", "coffee", "bakery", "tea room", "bagel", "donut"]
-BREAKFAST_KEYWORDS = ["breakfast", "brunch"]
-
-# Place types: each place has exactly one. value -> how it looks around the app.
-PLACE_TYPES = ["restaurant", "cocktail_bar", "cafe", "breakfast"]
-TYPE_LABELS = {  # forms
-    "restaurant": "Restaurant 🍽️", "cocktail_bar": "Cocktail Bar 🍸",
-    "cafe": "Cafe ☕", "breakfast": "Breakfast / Brunch 🥞",
-}
-TYPE_BADGES = {  # badge text
-    "restaurant": "Restaurant", "cocktail_bar": "Cocktail Bar",
-    "cafe": "Cafe", "breakfast": "Breakfast / Brunch",
-}
-TYPE_EMOJI = {"restaurant": "🍽️", "cocktail_bar": "🍸", "cafe": "☕", "breakfast": "🥞"}
-TYPE_FILTER_LABELS = {  # Random Pick filter
-    "restaurant": "Restaurants 🍽️", "cocktail_bar": "Bars 🍸",
-    "cafe": "Cafes ☕", "breakfast": "Breakfast / Brunch 🥞",
-}
-# (icon name, icon set) for map pins. Restaurant and bar keep their current glyphs.
-MAP_ICONS = {
-    "restaurant": ("cutlery", "glyphicon"), "cocktail_bar": ("glass", "glyphicon"),
-    "cafe": ("coffee", "fa"), "breakfast": ("sun", "fa"),
-}
 
 
 def haversine_miles(lat1, lon1, lat2, lon2):
@@ -567,23 +509,12 @@ def guess_neighborhood(lat, lon):
 def guess_cuisine_and_type(category_text):
     """Best-effort cuisine + restaurant/bar guess from an ArcGIS POI category string."""
     text = (category_text or "").lower()
-    if any(k in text for k in BREAKFAST_KEYWORDS):
-        place_type = "breakfast"
-    elif any(k in text for k in CAFE_KEYWORDS):
-        place_type = "cafe"
-    elif any(k in text for k in BAR_KEYWORDS):
-        place_type = "cocktail_bar"
-    else:
-        place_type = "restaurant"
+    place_type = "cocktail_bar" if any(k in text for k in BAR_KEYWORDS) else "restaurant"
     cuisine = "Other"
     for keyword, label in CUISINE_KEYWORDS:
         if keyword in text:
             cuisine = label
             break
-    if cuisine == "Other" and place_type == "cafe":
-        cuisine = "Coffee & Bakery"
-    elif cuisine == "Other" and place_type == "breakfast":
-        cuisine = "American"
     return cuisine, place_type
 
 
@@ -633,7 +564,7 @@ def render_badges(r):
         badge_html(r["cuisine"]),
         badge_html(r["price"]),
         badge_html(r["location"]),
-        badge_html(TYPE_BADGES.get(r.get("type"), "Restaurant"), "badge-type"),
+        badge_html("Cocktail Bar" if r.get("type") == "cocktail_bar" else "Restaurant", "badge-type"),
     ]
     if r.get("favorite"):
         parts.append(badge_html("♥ Favorite", "badge-fav"))
@@ -808,37 +739,21 @@ NEIGHBORHOODS = [
     "Wrigleyville"
 ]
 CUISINES = [
-    "African",
     "American",
     "Asian",
-    "Barbecue",
-    "Burgers",
-    "Caribbean",
     "Chinese",
     "Cocktails",
-    "Coffee & Bakery",
-    "Deli & Sandwiches",
-    "Dessert",
     "French",
-    "German",
-    "Greek",
     "Indian",
     "Italian",
     "Japanese",
-    "Korean",
-    "Latin American",
     "Mediterranean",
     "Mexican",
-    "Middle Eastern",
     "Other",
-    "Pizza",
-    "Polish & Eastern European",
     "Seafood",
     "Spanish",
     "Steakhouse",
-    "Thai",
-    "Vegetarian & Vegan",
-    "Vietnamese",
+    "Thai"
 ]
 VISITED_OPTIONS = ["All", "Visited Only", "Not Visited Yet"]
 # ────────────────────────────── View All Places ──────────────────────────────
@@ -887,7 +802,7 @@ if action == "📖 View All Places":
             sorted_places = filtered
         for idx, r in enumerate(sorted_places):
             global_idx = restaurants.index(r)
-            icon = f" {TYPE_EMOJI.get(r.get('type'), '🍽️')}"
+            icon = " 🍸" if r.get("type") == "cocktail_bar" else " 🍽️"
             fav = " ❤️" if r.get("favorite") else ""
             visited = " ✅" if r.get("visited") else ""
             visited_date_str = f" (visited {r['visited_date']})" if r.get("visited") and r.get("visited_date") else ""
@@ -970,9 +885,9 @@ if action == "📖 View All Places":
                                                  index=NEIGHBORHOODS.index(r["location"]) if r["location"] in NEIGHBORHOODS else 0,
                                                  key=f"edit_location_{global_idx}")
                     edit_address = st.text_input("Address", value=r["address"], key=f"edit_address_{global_idx}")
-                    edit_type = st.selectbox("Type", PLACE_TYPES,
-                                             index=PLACE_TYPES.index(r["type"]) if r.get("type") in PLACE_TYPES else 0,
-                                             format_func=lambda x: TYPE_LABELS[x],
+                    edit_type = st.selectbox("Type", ["restaurant", "cocktail_bar"],
+                                             index=0 if r["type"] == "restaurant" else 1,
+                                             format_func=lambda x: "Restaurant 🍽️" if x == "restaurant" else "Cocktail Bar 🍸",
                                              key=f"edit_type_{global_idx}")
                     edit_retired = st.checkbox("😔 Retired?", value=r.get("retired", False), key=f"edit_retired_{global_idx}")
                     edit_visited = st.checkbox("✅ I've already visited this place", value=r.get("visited", False),
@@ -1152,9 +1067,7 @@ elif action == "🗺️ Map View":
                 <i class="fa fa-map-marker" style="color:__NV__; font-size:14px;"></i> Not Visited<br>
                 <hr style="margin: 5px 0; border-color: rgba(201,160,52,0.3);">
                 🍽️ Restaurant<br>
-                🍸 Cocktail Bar<br>
-                ☕ Cafe<br>
-                🥞 Breakfast / Brunch
+                🍸 Cocktail Bar
             </div>
         </details>
     </div>
@@ -1173,7 +1086,8 @@ elif action == "🗺️ Map View":
             places_mapped += 1
             mapped_points.append((lat, lon))
             color = "green" if r.get("visited") else not_visited_color
-            icon_name, icon_prefix = MAP_ICONS.get(r.get("type"), MAP_ICONS["restaurant"])
+            icon_name = "glass" if r["type"] == "cocktail_bar" else "cutlery"
+            icon_prefix = "glyphicon"
             image_html = ""
             if r.get("images"):
                 image_html = f'<img src="{r["images"][0]}" style="width:100%; height:120px; object-fit:cover; border-radius:5px; margin-bottom:8px;">'
@@ -1216,8 +1130,6 @@ elif action == "➕ Add a Place":
         guess_cuisine_and_type=guess_cuisine_and_type,
         cuisines=CUISINES,
         neighborhoods=NEIGHBORHOODS,
-        place_types=PLACE_TYPES,
-        type_labels=TYPE_LABELS,
     )
 # ────────────────────────────── Random Pick ──────────────────────────────
 else:
@@ -1236,8 +1148,8 @@ else:
                 price_filter = st.multiselect("Price", sorted({r["price"] for r in restaurants}, key=len))
             c4, c5, c6 = st.columns(3)
             with c4:
-                type_filter = st.selectbox("Type", ["all"] + PLACE_TYPES,
-                                           format_func=lambda x: "All" if x == "all" else TYPE_FILTER_LABELS[x])
+                type_filter = st.selectbox("Type", ["all", "restaurant", "cocktail_bar"],
+                                           format_func=lambda x: {"all": "All", "restaurant": "Restaurants 🍽️", "cocktail_bar": "Bars 🍸"}[x])
             with c5:
                 visited_filter = st.selectbox("Visited Status", VISITED_OPTIONS)
             with c6:
