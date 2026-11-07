@@ -2,7 +2,7 @@ name: Keep Streamlit app awake
 
 on:
   schedule:
-    - cron: "0 */11 * * *"   # every 8 hours (UTC); Streamlit sleeps after ~12h idle
+    - cron: "17 12 */5 * *"   # every 5 days at 12:17 UTC
   workflow_dispatch:         # lets you run it manually from the Actions tab
 
 jobs:
